@@ -8,6 +8,7 @@ import sys
 import glob
 import os.path
 import logging
+import subprocess
 
 
 FOLDER = "A roll"
@@ -17,33 +18,48 @@ EXT = "mpg"
 
 
 class Shot():
-    """Plays the requested file with ffplay."""
+    """Footage file abstraction object."""
 
     def __init__(self, number):
         self.number = int(number)
-
-    @property
-    def pathname(self):
-        assert isinstance(self.number, int)
+        pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
+            folder=FOLDER,
+            prefix=PREFIX,
+            number=self.number,
+            numfmt=NUMFMT,
+            ext=EXT,
+            )
         try:
-            return glob.glob(
-                "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
-                    folder=FOLDER,
-                    prefix=PREFIX,
-                    number=self.number,
-                    numfmt=NUMFMT,
-                    ext=EXT,
-                    )
-                )[0]
+            self.pathname = glob.glob(pattern)[0]
         except IndexError as err:
+            self.pathname = None
             raise FileNotFoundError(
-                "Didn't find footage number {}.".format(self.number)
+                "Didn't find footage number {}.\n"
+                "Pattern is \"{}\".".format(self.number, pattern)
                 ) from err
         except :
             logging.error("That's a new exception?!")
             logging.error(sys.exc_info())
 
-if __name__ == "__main__":
-    import sys
-    player = Player(sys.argv[1])
-    print(player.pathname)
+    def play(self, seek=0, dur=None):
+        """Play the footage with ffplay."""
+        dur = ["-t", str(dur)] if dur is not None else []
+        seek = str(seek)
+        with open("/tmp/timecode_drawtext", "wt") as f:
+            f.write(self.pathname + "\n%{pts}\n%{n}")
+        drawtext = (
+            "textfile=/tmp/timecode_drawtext:"
+            "y=h-text_h-20:x=30:fontcolor=red:fontsize=25:"
+            "fontfile=/usr/share/fonts/TTF/ttf-inconsolata.otf"
+            )
+        player = subprocess.check_output(
+            [
+                "ffplay",
+                "-autoexit",
+                "-vf", "yadif,drawtext=" + drawtext,
+                "-ss", seek,
+                ] + dur + [
+                self.pathname,
+            ],
+            stderr=subprocess.DEVNULL,
+            )
