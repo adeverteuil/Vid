@@ -10,6 +10,7 @@ import unittest
 import subprocess
 
 from .. import Shot
+from .. import Cat
 
 
 workdir = os.path.abspath(os.path.dirname(__file__))
@@ -61,11 +62,20 @@ class ShotTestCase(unittest.TestCase):
 
     def test_cut(self):
         shot = Shot(54)
-        cut = shot.cut(dur=0.1, audio=False)
+        cut = shot.cut(dur=5, audio=False)
         self.assertIsInstance(
             cut,
             io.BufferedIOBase,
             msg="Returned object: {}".format(type(cut))
+            )
+        self.assertEqual(
+            cut.readline(),
+            b'YUV4MPEG2 W720 H480 F30000:1001 It A32:27 '
+            b'C420mpeg2 XYSCSS=420MPEG2\n'
+            )
+        self.assertEqual(
+            cut.readline(),
+            b'FRAME\n'
             )
         while cut.read():
             # Just pump the stdout from ffmpeg.
@@ -73,5 +83,37 @@ class ShotTestCase(unittest.TestCase):
         self.assertEqual(shot.process.wait(), 0)
 
     def test_cat(self):
-        pass
-        # This is a stub.
+        temp = io.BytesIO()
+        cat = Cat(((54, 0, .1),), video=temp)
+        #self.assertEqual(
+        #    temp.readline(),
+        #    b'YUV4MPEG2 W720 H480 F30000:1001 It A32:27 '
+        #    b'C420mpeg2 XYSCSS=420MPEG2\n'
+        #    )
+        vtemp = io.BytesIO()
+        atemp = io.BytesIO()
+        cat = Cat(((54, 0, .1),), video=vtemp, audio=atemp)
+        with self.assertRaises(FileNotFoundError):
+            cat = Cat(((56, 0, .1),), video=temp)
+        vtemp = io.BytesIO()
+        atemp = io.BytesIO()
+        with self.assertRaises(FileNotFoundError):
+            cat = Cat(((56, 0, .1),), video=vtemp, audio=atemp)
+        vtemp = io.BytesIO()
+        atemp = io.BytesIO()
+        p = subprocess.Popen(
+            [
+                "ffplay",
+                "-autoexit",
+                "-f", "yuv4mpegpipe",
+                "pipe:",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+            )
+        cat = Cat(
+            ((54, 0, 1), (54, 4, 1), (54, 2, 1)),
+            video=p.stdin, audio=atemp
+            )
+        #Shot._pipe_to_player(cat.video, "Concatenation test")

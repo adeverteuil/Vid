@@ -4,8 +4,10 @@
 # Copyright (C) 2013  Alexandre de Verteuil
 
 
+import io
 import sys
 import glob
+import queue
 import os.path
 import logging
 import threading
@@ -43,28 +45,40 @@ class Shot():
 
     def play(self, seek=0, dur=None):
         """Play the footage with ffplay."""
-        #dur = ["-t", str(dur)] if dur is not None else []
-        #seek = str(seek)
+        fd = self.cut(seek, dur, audio=False)
+        self._pipe_to_player(fd, self.pathname)
+
+    @staticmethod
+    def _pipe_to_player(fd, textline=None):
         with open("/tmp/timecode_drawtext", "wt") as f:
-            f.write(self.pathname + "\n%{pts}\n%{n}")
+            if textline:
+                f.write(textline + "\n")
+            f.write("%{pts}\n%{n}")
         drawtext = (
             "textfile=/tmp/timecode_drawtext:"
             "y=h-text_h-20:x=30:fontcolor=red:fontsize=25:"
             "fontfile=/usr/share/fonts/TTF/ttf-inconsolata.otf"
             )
-        player = subprocess.check_output(
-            [
-                "ffplay",
-                "-autoexit",
-                "-vf", "yadif,drawtext=" + drawtext,
-                #"-ss", seek,
-                #] + dur + [
-                "-f", "yuv4mpegpipe",
-                "pipe:0",
-            ],
+        cmd = [
+            "ffplay",
+            "-autoexit",
+            "-vf", "yadif,drawtext=" + drawtext,
+            #"-ss", seek,
+            #] + dur + [
+            "-f", "yuv4mpegpipe",
+            "pipe:0",
+            ]
+        player = subprocess.Popen(
+            cmd,
             stderr=subprocess.DEVNULL,
-            stdin=self.cut(seek, dur, audio=False),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             )
+        player.stdin.write(fd.read())
+        player.stdin.close()
+        returncode = player.wait()
+        if returncode > 0:
+            raise subprocess.CalledProcessError(returncode, cmd, "")
 
     def cut(self, seek=0, dur=None, video=True, audio=True, header=True):
         """Returns file objects for the requested footage timeframe.
@@ -111,9 +125,9 @@ class Shot():
                 stderr=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 )
-            if not header:
-                video.stdout.readline()
-                video.stdout.readline()
+            #if not header:
+            #    video.stdout.readline()
+            #    video.stdout.readline()
         if audio:
             audio = subprocess.Popen(
                 [
@@ -143,30 +157,83 @@ class Shot():
 
 
 class Cat():
-    """Concatenates video streams."""
+    """Concatenates video streams.
 
-    def __init__(self, sequences, video=True, audio=True):
+    Threading help from this StackOverflow post:
+    http://stackoverflow.com/questions/2829329/catch-a-threads-exception-in-the-caller-thread-in-python
+
+    """
+
+    def __init__(self, sequences, video=None, audio=None):
         self.sequences = sequences
-        self.video = io.BytesIO() if video else None
-        self.audio = io.BytesIO() if audio else None
-        self.cat()
+        self.video = None
+        self.audio = None
+        self.bucket = queue.Queue()
+        threads = []
+        if video is not None:
+            self.vthread = threading.Thread(
+                target=self._cat,
+                args=("v", video),
+                )
+            self.vthread.start()
+            threads.append(self.vthread)
+        if audio is not None:
+            self.athread = threading.Thread(
+                target=self._cat,
+                args=("a", audio),
+                )
+            self.athread.start()
+            threads.append(self.athread)
+        while threads:
+            for thread in threads:
+                thread.join(0.1)
+                if thread.is_alive():
+                    continue
+                else:
+                    threads.remove(thread)
+        try:
+            exc = self.bucket.get(block=False)
+        except queue.Empty:
+            pass
+        else:
+            exc_type, exc_obj, exc_trace = exc
+            raise exc_obj
 
-    def cat(self):
+    def _cat(self, stream, fd):
         """Concatenates streams, return file object.
 
-        sequences is an iterator of tuples whose first item is
-        the footage identifier, the second item is the seek
-        position and the optional third is the clip duration.
+        self.sequences is an iterator of tuples whose first item is the
+        footage identifier, the second item is the seek position and the
+        optional third is the clip duration.
 
         Returns a file object of the contatenated streams.
 
-        If both audio and video are true, then a tuple of file
-        object is returned as (video_stream, audio_stream).
-        If either audio or video is false, then only a file object
-        is returned.
+        If both audio and video are true, then a tuple of file object is
+        returned as (video_stream, audio_stream).  If either audio or
+        video is false, then only a file object is returned.
 
         At least one of video or audio must be true.
 
         """
-        return
-        # This is a stub.
+        assert stream == "a" or stream == "v"
+        audio = True if stream == "a" else False
+        video = True if stream == "v" else False
+        header = True
+        try:
+            for sequence in self.sequences:
+                cut = Shot(sequence[0]).cut(
+                    *sequence[1:],
+                    audio=audio,
+                    video=video,
+                    header=header
+                    )
+                #if not header:
+                #    print(cut.readline())
+                fd.write(
+                    cut.read()
+                    )
+                cut.close()
+                header = False
+            fd.close()
+        except:
+            self.bucket.put(sys.exc_info())
