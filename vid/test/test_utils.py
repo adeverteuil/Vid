@@ -4,6 +4,7 @@
 # Copyright (C) 2013  Alexandre de Verteuil
 
 
+import io
 import os.path
 import unittest
 import subprocess
@@ -57,3 +58,20 @@ class ShotTestCase(unittest.TestCase):
         shot.play(45)
         with self.assertRaises(subprocess.SubprocessError):
             shot.play("a")
+
+    def test_cut(self):
+        shot = Shot(54)
+        cut = shot.cut(dur=0.1, audio=False)
+        self.assertIsInstance(
+            cut,
+            io.BufferedIOBase,
+            msg="Returned object: {}".format(type(cut))
+            )
+        while cut.read():
+            # Just pump the stdout from ffmpeg.
+            continue
+        self.assertEqual(shot.process.wait(), 0)
+
+    def test_cat(self):
+        pass
+        # This is a stub.
