@@ -18,12 +18,15 @@ FOLDER = "A roll"
 PREFIX = "M2U"
 NUMFMT = "05d"
 EXT = "mpg"
+logger = logging.getLogger(__name__)
 
 
 class Shot():
     """Footage file abstraction object."""
     def __init__(self, number):
         self.number = int(number)
+        self.input_args = dict()
+        self.output_args = dict()
         pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
             folder=FOLDER,
             prefix=PREFIX,
@@ -40,8 +43,7 @@ class Shot():
                 "Pattern is \"{}\".".format(self.number, pattern)
                 ) from err
         except :
-            logging.error("That's a new exception?!")
-            logging.error(sys.exc_info())
+            logger.exception("That's a new exception?!")
 
     def play(self, seek=0, dur=None):
         """Play the footage with ffplay."""
@@ -80,81 +82,48 @@ class Shot():
         if returncode > 0:
             raise subprocess.CalledProcessError(returncode, cmd, "")
 
-    def cut(self, seek=0, dur=None, video=True, audio=True, header=True):
-        """Returns file objects for the requested footage timeframe.
+    def cut(self, seek=0, dur=None):
+        """Sets the starting position and duration of the required frames."""
+        float(seek)
+        if seek >= 30:
+            fastseek = seek - 20
+            seek = 20
+            self.input_args['seek'] = ["-ss", str(fastseek)]
+        self.output_args['seek'] = ["-ss", str(seek)]
+        if dur:
+            float(dur)
+            self.output_args['duration'] = ["-t", str(dur)]
 
-        If both audio and video are true, then a tuple of file
-        object is returned as (video_stream, audio_stream).
-        If either audio or video is false, then only a file object
-        is returned.
-
-        At least one of video or audio must be true.
-
-        The video stream is yuv4 encoded.
-        The audio stream is pcm_s16le encoded.
-
-        If header is false, two ascii line of meta-info are removed
-        from the head of the video stream.
-
-        """
-        assert video or audio
+    def add_filter(self, filter, **kwargs):
+        """Append filter and its arguments to the filter list."""
         try:
-            float(seek)
-            if dur:
-                float(dur)
-        except ValueError:
-            raise subprocess.SubprocessError(
-                "Bad seek or dur parameters: {}, {}.".format(
-                    seek, dur
-                    )
-                )
-        dur = ["-t", str(dur)] if dur is not None else []
-        seek = str(seek)
-        if video:
-            video = subprocess.Popen(
-                [
-                    "ffmpeg",
-                    "-i", self.pathname,
-                    "-ss", seek,
-                    ] + dur + [
-                    "-f", "yuv4mpegpipe",
-                    "-vcodec", "rawvideo",
-                    "-an",
-                    "pipe:1"  # Write to standard output.
-                ],
-                stderr=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                )
-            #if not header:
-            #    video.stdout.readline()
-            #    video.stdout.readline()
-        if audio:
-            audio = subprocess.Popen(
-                [
-                    "ffmpeg",
-                    "-i", self.pathname,
-                    "-ss", seek,
-                    ] + dur + [
-                    "-f", "u16le",
-                    "-acodec", "pcm_s16le",
-                    "-ac", "2",
-                    "-ar", "44100",
-                    "-vn",
-                    "pipe:1",
-                ],
-                stderr=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                )
-        if not audio:
-            self.process = video
-            return video.stdout
-        elif not video:
-            self.process = audio
-            return audio.stdout
-        else:
-            self.process = (video, audio)
-            return (video.stdout, audio.stdout)
+            vf = [self.output_args['vf']]
+        except KeyError:
+            vf = []
+        args = []
+        for k, v in kwargs.items():
+            args.append(k + "=" + v)
+        args = ":".join(args)
+        filter = filter + "=" + args
+        vf.append(filter)
+        self.output_args['vf'] = ",".join(vf)
 
+    def drawtext(self, textline="", **kwargs):
+        """Shortcut to add drawtext filter with default values."""
+        #with open("/tmp/timecode_drawtext", "wt") as f:
+        #    if textline:
+        #        f.write(textline + "\n")
+        #    f.write("%{pts}\n%{n}")
+        arguments = {
+            'text': textline + "\n%{pts}\n%{n}",
+            'y': "h-text_h-20", 'x': 30,
+            'fontcolor': "red", 'fontsize': "25",
+            'fontfile': "/usr/share/fonts/TTF/ttf-inconsolata.otf",
+            }
+        arguments.update(**kwargs)
+        self.add_filter("drawtext", arguments)
+        
+        
 
 class Cat():
     """Concatenates video streams.
