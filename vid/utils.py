@@ -8,6 +8,7 @@ import io
 import sys
 import glob
 import queue
+import atexit
 import os.path
 import logging
 import threading
@@ -34,6 +35,13 @@ h = logging.StreamHandler()
 h.setLevel(logging.DEBUG)
 logger.addHandler(h)
 logger.info("logging started")
+
+
+@atexit.register
+def cleanup():
+    logging.shutdown()
+    for f in glob.glob("/tmp/vid*"):
+        os.unlink(f)
 
 
 class Shot():
