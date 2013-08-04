@@ -76,6 +76,7 @@ class Shot():
             self.audio_process = subprocess.Popen(
                 [
                     "ffmpeg",
+                    "-y",
                     "-i", self.pathname,
                     "-vn",
                     "-f", "u16le",
@@ -92,6 +93,7 @@ class Shot():
             self.video_process = subprocess.Popen(
                 [
                     "ffmpeg",
+                    "-y",
                     "-i", self.pathname,
                     "-an",
                     "-f", "yuv4mpegpipe",
@@ -108,16 +110,45 @@ class Shot():
                 video, audio, output
                 )
             )
+        cmd = [
+            "ffmpeg",
+            "-y",
+            ]
+        for k, v in self.input_args.items():
+            cmd.append(k)
+            if v is not None:
+                cmd.append(v)
+        cmd += [
+            "-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-i", video,
+            ]
+        for k, v in self.input_args.items():
+            cmd.append(k)
+            if v is not None:
+                cmd.append(v)
+        cmd += [
+            "-f", "u16le", "-acodec", "pcm_s16le",
+            "-ac", "2", "-ar", "44100", "-i", audio,
+            "-f", "avi",
+            "-codec", "copy",
+            ]
+        for k, v in self.output_args.items():
+            cmd.append(k)
+            if v is not None:
+                cmd.append(v)
+        cmd += [output]
         self.merge_process = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-i", video,
-                "-f", "u16le", "-acodec", "pcm_s16le",
-                "-ac", "2", "-ar", "44100", "-i", audio,
-                "-f", "avi",
-                output
-            ],
-            #stderr=subprocess.DEVNULL,
+            cmd,
+            #[
+            #    "ffmpeg",
+            #    "-y",
+            #    "-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-i", video,
+            #    "-f", "u16le", "-acodec", "pcm_s16le",
+            #    "-ac", "2", "-ar", "44100", "-i", audio,
+            #    "-f", "avi",
+            #    "-codec", "copy",
+            #    output
+            #],
+            stderr=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             )
 
@@ -143,44 +174,15 @@ class Shot():
         self.player_process = subprocess.Popen(
             [
                 "ffplay",
+                "-autoexit",
                 "-f", "avi",
+                "-vcodec", "rawvideo",
+                "-acodec", "pcm_s16le", "-ac", "2", "-ar", "44100",
                 "-i", filename,
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             )
-
-    @staticmethod
-    def _pipe_to_player(fd, textline=None):
-        with open("/tmp/timecode_drawtext", "wt") as f:
-            if textline:
-                f.write(textline + "\n")
-            f.write("%{pts}\n%{n}")
-        drawtext = (
-            "textfile=/tmp/timecode_drawtext:"
-            "y=h-text_h-20:x=30:fontcolor=red:fontsize=25:"
-            "fontfile=/usr/share/fonts/TTF/ttf-inconsolata.otf"
-            )
-        cmd = [
-            "ffplay",
-            "-autoexit",
-            "-vf", "yadif,drawtext=" + drawtext,
-            #"-ss", seek,
-            #] + dur + [
-            "-f", "yuv4mpegpipe",
-            "pipe:0",
-            ]
-        player = subprocess.Popen(
-            cmd,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            )
-        player.stdin.write(fd.read())
-        player.stdin.close()
-        returncode = player.wait()
-        if returncode > 0:
-            raise subprocess.CalledProcessError(returncode, cmd, "")
 
     def cut(self, seek=0, dur=None):
         """Sets the starting position and duration of the required frames."""
@@ -188,11 +190,11 @@ class Shot():
         if seek >= 30:
             fastseek = seek - 20
             seek = 20
-            self.input_args['seek'] = ["-ss", str(fastseek)]
-        self.output_args['seek'] = ["-ss", str(seek)]
+            self.input_args['-ss'] = str(fastseek)
+        self.output_args['-ss'] = str(seek)
         if dur:
             float(dur)
-            self.output_args['duration'] = ["-t", str(dur)]
+            self.output_args['-t'] = str(dur)
 
     def add_filter(self, filter, **kwargs):
         """Append filter and its arguments to the filter list."""
@@ -222,8 +224,7 @@ class Shot():
             }
         arguments.update(**kwargs)
         self.add_filter("drawtext", arguments)
-        
-        
+
 
 class Cat():
     """Concatenates video streams.
