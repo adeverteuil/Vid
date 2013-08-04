@@ -55,7 +55,7 @@ class ShotTestCase(unittest.TestCase):
     def test_play(self):
         shot = Shot(54)
         #shot.play()
-        shot.cut(6, 5)
+        shot.cut(6, 1)
         shot.play()
         #with self.assertRaises(subprocess.SubprocessError):
         #    shot.play("a")
