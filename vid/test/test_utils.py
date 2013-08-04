@@ -60,28 +60,33 @@ class ShotTestCase(unittest.TestCase):
         #with self.assertRaises(subprocess.SubprocessError):
         #    shot.play("a")
 
-    @unittest.skip("Rewriting code")
     def test_cut(self):
         shot = Shot(54)
-        cut = shot.cut(dur=5, audio=False)
-        self.assertIsInstance(
-            cut,
-            io.BufferedIOBase,
-            msg="Returned object: {}".format(type(cut))
-            )
-        self.assertEqual(
-            cut.readline(),
-            b'YUV4MPEG2 W720 H480 F30000:1001 It A32:27 '
-            b'C420mpeg2 XYSCSS=420MPEG2\n'
-            )
-        self.assertEqual(
-            cut.readline(),
-            b'FRAME\n'
-            )
-        while cut.read():
-            # Just pump the stdout from ffmpeg.
-            continue
-        self.assertEqual(shot.process.wait(), 0)
+
+        cut = shot.cut(dur=5)
+        self.assertNotIn('-ss', shot.input_args)
+        self.assertNotIn('-ss', shot.output_args)
+        self.assertEqual(shot.output_args['-t'], "5")
+
+        cut = shot.cut(seek=5)
+        self.assertNotIn('-ss', shot.input_args)
+        self.assertEqual(shot.output_args['-ss'], "5")
+        self.assertNotIn('-t', shot.output_args)
+
+        cut = shot.cut(5, 6)
+        self.assertNotIn('-ss', shot.input_args)
+        self.assertEqual(shot.output_args['-ss'], "5")
+        self.assertEqual(shot.output_args['-t'], "6")
+
+        cut = shot.cut()
+        self.assertNotIn('-ss', shot.input_args)
+        self.assertNotIn('-ss', shot.output_args)
+        self.assertNotIn('-t', shot.output_args)
+
+        cut = shot.cut(45)
+        self.assertEqual(shot.input_args['-ss'], "25")
+        self.assertEqual(shot.output_args['-ss'], "20")
+        self.assertNotIn('-t', shot.output_args)
 
     @unittest.skip("Rewriting code")
     def test_cat(self):

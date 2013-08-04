@@ -186,12 +186,19 @@ class Shot():
 
     def cut(self, seek=0, dur=None):
         """Sets the starting position and duration of the required frames."""
+        if '-ss' in self.input_args:
+            del self.input_args['-ss']
+        if '-ss' in self.output_args:
+            del self.output_args['-ss']
+        if '-t' in self.output_args:
+            del self.output_args['-t']
         float(seek)
         if seek >= 30:
             fastseek = seek - 20
             seek = 20
             self.input_args['-ss'] = str(fastseek)
-        self.output_args['-ss'] = str(seek)
+        if seek > 0:
+            self.output_args['-ss'] = str(seek)
         if dur:
             float(dur)
             self.output_args['-t'] = str(dur)
