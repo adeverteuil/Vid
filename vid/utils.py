@@ -18,7 +18,22 @@ FOLDER = "A roll"
 PREFIX = "M2U"
 NUMFMT = "05d"
 EXT = "mpg"
+EXTRA_OPTIONS = [
+    "-vcodec", "libx264",
+    "-crf", "23",
+    "-preset", "medium",
+    "-acodec", "aac",
+    "-strict", "experimental",
+    "-ac", "2",
+    "-ar", "44100",
+    "-ab", "128k",
+    ]
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+h = logging.StreamHandler()
+h.setLevel(logging.DEBUG)
+logger.addHandler(h)
+logger.info("logging started")
 
 
 class Shot():
@@ -45,10 +60,87 @@ class Shot():
         except :
             logger.exception("That's a new exception?!")
 
-    def play(self, seek=0, dur=None):
+    def process(self, video=None, audio=None):
+        """Write audio and video to provided keyword arguments."""
+        assert audio or video
+        if audio:
+            logger.info("Writing raw audio to {}.".format(audio))
+            self.audio_process = subprocess.Popen(
+                [
+                    "ffmpeg",
+                    "-i", self.pathname,
+                    "-vn",
+                    "-f", "u16le",
+                    "-acodec", "pcm_s16le",
+                    "-ac", "2",
+                    "-ar", "44100",
+                    audio,
+                ],
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                )
+        if video:
+            logger.info("Writing raw video to {}.".format(video))
+            self.video_process = subprocess.Popen(
+                [
+                    "ffmpeg",
+                    "-i", self.pathname,
+                    "-an",
+                    "-f", "yuv4mpegpipe",
+                    "-vcodec", "rawvideo",
+                    video,
+                ],
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                )
+
+    def _merge_streams(self, video, audio, output):
+        logger.info(
+            "Merging {} and {} into {}.".format(
+                video, audio, output
+                )
+            )
+        self.merge_process = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-i", video,
+                "-f", "u16le", "-acodec", "pcm_s16le",
+                "-ac", "2", "-ar", "44100", "-i", audio,
+                "-f", "avi",
+                output
+            ],
+            #stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            )
+
+    def play(self):
         """Play the footage with ffplay."""
-        fd = self.cut(seek, dur, audio=False)
-        self._pipe_to_player(fd, self.pathname)
+        fifo_v = "/tmp/vid_play_v"
+        fifo_a = "/tmp/vid_play_a"
+        fifo_m = "/tmp/vid_play_m"
+        for path in (fifo_v, fifo_a, fifo_m):
+            try:
+                os.mkfifo(path)
+            except FileExistsError:
+                pass
+        self.process(video=fifo_v, audio=fifo_a)
+        self._merge_streams(fifo_v, fifo_a, fifo_m)
+        self._play(fifo_m)
+        rv = self.player_process.wait()
+        if rv > 0:
+            raise subprocess.SubprocessError
+
+    def _play(self, filename):
+        logger.info("Reading {}.".format(filename))
+        self.player_process = subprocess.Popen(
+            [
+                "ffplay",
+                "-f", "avi",
+                "-i", filename,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            )
 
     @staticmethod
     def _pipe_to_player(fd, textline=None):
