@@ -21,8 +21,7 @@ class ShotTestCase(unittest.TestCase):
     def setUp(self):
         os.chdir(workdir)
 
-    @unittest.skip("rewriting code")
-    def test_init(self):
+    def test_shot_init(self):
         with self.assertRaises(FileNotFoundError):
             shot = Shot(1)
             self.assertIsInstance(
@@ -41,12 +40,12 @@ class ShotTestCase(unittest.TestCase):
             self.assertIsNone(shot.pathname)
         self.assertRaises(ValueError, Shot, "a")
         self.assertEqual(
-            Shot(54).pathname,
+            Shot(54).name,
             "A roll/testsequence/M2U00054.mpg",
             msg="Looking for roll 54.",
             )
         self.assertEqual(
-            Shot(55).pathname,
+            Shot(55).name,
             "A roll/testsequence/M2U00055.mpg",
             msg="Looking for roll 55.",
             )
@@ -61,6 +60,12 @@ class ShotTestCase(unittest.TestCase):
         shot.play()
         #with self.assertRaises(subprocess.SubprocessError):
         #    shot.play("a")
+
+    def test_shot_repr(self):
+        self.assertEqual(
+            repr(Shot(54)),
+            "<_io.FileIO name='A roll/testsequence/M2U00054.mpg' mode='rb'>"
+            )
 
     @unittest.skip("rewriting code")
     def test_cut(self):

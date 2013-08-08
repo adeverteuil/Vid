@@ -34,15 +34,55 @@ class Editor():
     """The Editor fetches streams, applies filters and outputs a movie.
 
     """
-    def __init__():
+    def __init__(self):
         pass
 
 
-class Shot():
+class Shot(io.FileIO):
     """Abstraction for a movie file copied from the camcorder."""
-    def __init__():
+    def __init__(self, number):
+        self.number = int(number)
+        self.seek = 0
+        self.dur = None
+        pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
+            folder="A roll",
+            prefix="M2U",
+            number=self.number,
+            numfmt="05d",
+            ext="mpg",
+            )
+        try:
+            pathname = glob.glob(pattern)[0]
+        except IndexError as err:
+            pathname = None
+            raise FileNotFoundError(
+                "Didn't find footage number {}.\n"
+                "Pattern is \"{}\".".format(self.number, pattern)
+                ) from err
+        except :
+            logger.exception("That's a new exception?!")
+        super().__init__(pathname, "rb")
+
+    #def __repr__(self):
+    #    return "<Shot #{}, seek {}, dur {}>".format(
+    #        self.number, self.seek, self.dur
+    #        )
+
+    def cut(self):
         pass
 
+
+class Demuxer():
+    pass
+
+
+class Muxer():
+    pass
+
+
+class Black(Shot):
+    """Generates silence on audio and black frames on video."""
+    pass
 
 class Stream():
     """Base class for a video or audio stream."""
