@@ -1,6 +1,9 @@
-from .utils import Shot, Cat
+from .utils import *
 
 __all__ = [
+    "Editor",
     "Shot",
-    "Cat",
+    "Stream",
+    "VideoStream",
+    "AudioStream",
     ]
