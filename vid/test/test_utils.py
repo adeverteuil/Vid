@@ -5,6 +5,7 @@
 
 
 import io
+import shutil
 import os.path
 import unittest
 import threading
@@ -50,7 +51,7 @@ class ShotTestCase(unittest.TestCase):
             msg="Looking for roll 55.",
             )
         with self.assertRaises(FileNotFoundError):
-            pathname = Shot(56).pathname
+            pathname = Shot(56).name
 
     @unittest.skip("rewriting code")
     def test_play(self):
@@ -66,6 +67,14 @@ class ShotTestCase(unittest.TestCase):
             repr(Shot(54)),
             "<_io.FileIO name='A roll/testsequence/M2U00054.mpg' mode='rb'>"
             )
+
+    def test_shot_read(self):
+        shot = Shot(54)
+        self.assertIsInstance(
+            shot.read(4),
+            bytes,
+            )
+        shot.close()
 
     @unittest.skip("rewriting code")
     def test_cut(self):
@@ -96,34 +105,39 @@ class ShotTestCase(unittest.TestCase):
         self.assertEqual(shot.output_args['-ss'], "20")
         self.assertNotIn('-t', shot.output_args)
 
-    @unittest.skip("rewriting code")
-    def test_process(self):
-        shot = Shot(54)
-        try:
-            os.mkfifo("test_fifo")
-        except FileExistsError:
-            pass
-        shot.process("test_fifo")
-        with open("test_fifo", "rb") as f, open(os.devnull, "wb") as devnull:
-            self.assertEqual(
-                f.readline(),
-                b'YUV4MPEG2 W720 H480 F30000:1001 '
-                b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
-                )
+    def test_shot_demux(self):
+        pipe_r, pipe_w = os.pipe()
+        print("Pipes {} and {}.".format(pipe_r, pipe_w))
+        with open(pipe_w, "wb") as pipe_w:
+            with Shot(54) as shot, \
+            open(pipe_r, "rb") as f:
+                shot.demux(video=pipe_w)
+                self.assertEqual(
+                    f.readline(),
+                    b'YUV4MPEG2 W720 H480 F30000:1001 '
+                    b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
+                    )
+                self.assertEqual(
+                    f.readline(),
+                    b'FRAME\n',
+                    )
+        pipe_r, pipe_w = os.pipe()
+        print("Pipes {} and {}.".format(pipe_r, pipe_w))
+        #with open(pipe_w, "wb") as pipe_w:
+        with Shot(54) as shot, \
+        open(pipe_r, "rb") as f:
+            shot.demux(video=pipe_w, remove_header=True)
             self.assertEqual(
                 f.readline(),
                 b'FRAME\n',
                 )
-            devnull.write(f.read())
-        shot.process("test_fifo", remove_header=True)
-        with open("test_fifo", "rb") as f, open(os.devnull, "wb") as devnull:
-            self.assertNotEqual(
-                f.readline(),
-                b'YUV4MPEG2 W720 H480 F30000:1001 '
-                b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
-                )
-            devnull.write(f.read())
-        os.unlink("test_fifo")
+            with open("testfile", "wb") as dn:
+                dn.write(
+                    b'YUV4MPEG2 W720 H480 F30000:1001 '
+                    b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
+                    )
+                dn.write(b'FRAME\n')
+                shutil.copyfileobj(f, dn)
 
     @unittest.skip("rewriting code")
     def test_cat(self):
