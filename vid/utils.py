@@ -36,21 +36,15 @@ def cleanup():
     logging.shutdown()
 
 
-class Editor():
-    """The Editor fetches streams, applies filters and outputs a movie.
-
-    """
-    def __init__(self):
-        pass
-
-
-class Shot(io.FileIO):
+class Shot():
     """Abstraction for a movie file copied from the camcorder."""
     def __init__(self, number):
         self.number = int(number)
-        self.seek_time = 0  # Don't override super().seek().
+        self.seek = 0
         self.dur = None
         self.process = None
+        self.v_stream = None
+        self.a_stream = None
         pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
             folder="A roll",
             prefix="M2U",
@@ -59,134 +53,106 @@ class Shot(io.FileIO):
             ext="mpg",
             )
         try:
-            pathname = glob.glob(pattern)[0]
+            self.name = glob.glob(pattern)[0]
         except IndexError as err:
-            pathname = None
+            self.name = None
             raise FileNotFoundError(
                 "Didn't find footage number {}.\n"
                 "Pattern is \"{}\".".format(self.number, pattern)
                 ) from err
         except :
             logger.exception("That's a new exception?!")
-        super().__init__(pathname, "rb")
 
-    def cut(self):
+    def __repr__(self):
+        return "<Shot({}), seek={}, dur={}>".format(
+            self.number,
+            self.seek,
+            self.dur,
+            )
+
+    def cut(self, seek=0, dur=None):
+        """Sets the starting position and duration of the required frames."""
+        self.seek = seek
+        self.dur = dur
+
+    def _probe(self):
         pass
 
-    def demux(self, video=None, audio=None, remove_header=False):
-        """Write video and audio to the provided keyword arguments."""
+    def demux(self, video=True, audio=True, remove_header=False):
+        """Write video and audio as specified. Sets v_stream and a_stream.
+        
+        This method will demultiplex the shot and pipe the raw video and audio
+        streams to those files. The caller is responsible for closing
+        the files.
+        
+        """
         assert video or audio
         args = ["ffmpeg", "-y"]
-        pass_fds = []
+        write_fds = []
 
         # Define input arguments
         if (FASTSEEK_THRESHOLD is not None and
             FASTSEEK_THRESHOLD > 10 and
-            self.seek_time > FASTSEEK_THRESHOLD
+            self.seek > FASTSEEK_THRESHOLD
             ):
-            fastseek = self.seek_time - (FASTSEEK_THRESHOLD - 10)
+            fastseek = self.seek - (FASTSEEK_THRESHOLD - 10)
             seek = FASTSEEK_THRESHOLD - 10
             args += ["-ss", str(fastseek)]
         else:
-            seek = self.seek_time  # This will actually be used for output.
-        args += ["-i", "pipe:0"]  # Will read from stdin
+            seek = self.seek  # This will actually be used for output.
+        args += ["-i", self.name]
 
         # Define output arguments
         if video:
-            vfd = video if isinstance(video, int) else video.fileno()
             if remove_header:
-                pipe_r, pipe_w = os.pipe()
-                logger.info("Piping {} to {}.".format(pipe_w, pipe_r))
-                logger.info("Piping {} to {}.".format(pipe_r, vfd))
+                video1_r, video1_w = os.pipe()
+                video2_r, video2_w = os.pipe()
                 t = threading.Thread(
                     target=self._remove_header,
-                    args=(pipe_r, vfd),
+                    args=(video1_r, video2_w),
                     )
+                write_fds.append(video1_w)
+                self.v_stream = open(video2_r, "rb")
+                if seek:
+                    args += ["-ss", str(seek)]
+                args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
                 t.start()
-                vfd = pipe_w
-            logger.info("Video pipe is {}.".format(vfd))
-            args += RAW_VIDEO + ["pipe:{}".format(vfd)]
-            pass_fds.append(vfd)
+            else:
+                video_fdr, video_fdw = os.pipe()
+                write_fds.append(video_fdw)
+                self.v_stream = open(video_fdr, "rb")
+                if seek:
+                    args += ["-ss", str(seek)]
+                args += RAW_VIDEO + ["pipe:{}".format(video_fdw)]
         if audio:
-            afd = audio if isinstance(audio, int) else audio.fileno()
-            args += RAW_AUDIO + ["pipe:{}".format(afd)]
-            pass_fds.append(vfd)
+            audio_fdr, audio_fdw = os.pipe()
+            write_fds.append(audio_fdw)
+            self.a_stream = open(audio_fdr, "rb")
+            args += RAW_AUDIO + ["pipe:{}".format(audio_fdw)]
 
         # Create subprocess
-        print(args)
         self.process = subprocess.Popen(
             args,
-            pass_fds=pass_fds,
+            pass_fds=write_fds,
             stderr=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
-            stdin=self,
+            stdin=subprocess.DEVNULL,
             )
+        for fd in write_fds:
+            # Close write file descriptors.
+            os.close(fd)
 
-    def _remove_header(self, input, output):
-        # It seems that the terminating subprocess does not close
-        # the passed writable file descriptor on the way out, thus
-        # making the use of select.select() unavoidable.
-        # I shall find out if it is possible to make Popen close such
-        # file descriptors.
-        with open(input, "rb", buffering=0) as input, open(output, "wb") as output:
-            line = input.readline()
-            assert line == (
-                b'YUV4MPEG2 W720 H480 F30000:1001 '
-                b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
-                ), line
-            # An AssertionError here might mean that the seek_time value
-            # exceeds the file length, in which case line == b''.
-            try:
-                #shutil.copyfileobj(input, output)
-                # commented out copyfileobj. It blocks because the
-                # subprocess does not close the pipe.
-                while True:
-                    rlist, wlist, xlist = select.select([input], [], [], 0.1)
-                    if rlist:
-                        buf = input.read(16*1024)
-                        if buf == b'':
-                            break
-                        output.write(buf)
-                    else:
-                        if self.process.poll() is not None:
-                            break
-            except BrokenPipeError:
-                # Caller closed output reader pipe.
-                pass
-            #except OSError:
-            #    pass
-
-    def close(self):
-        if self.process and self.process.poll() is None:
-            self.process.kill()
-            self.process.wait()
-        super().close()
-
-
-class Demuxer(Shot):
-    """Demultiplexes and decodes an mpg file, produces raw audio and video."""
-    def __init__():
-        pass
-
-
-class Muxer():
-    """Compresses raw audio and video, multiplexes and outputs one movie."""
-    def __init__():
-        pass
-
-
-class Black(Shot):
-    """Generates silence on audio and black frames on video."""
-    pass
-
-class Stream():
-    """Base class for a video or audio stream."""
-    pass
-
-
-class VideoStream(Stream):
-    pass
-
-
-class AudioStream(Stream):
-    pass
+    @staticmethod
+    def _remove_header(input, output):
+        try:
+            with open(input, "rb") as input, open(output, "wb") as output:
+                line = input.readline()
+                assert line == (
+                    b'YUV4MPEG2 W720 H480 F30000:1001 '
+                    b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
+                    ), line
+                # An AssertionError here might mean that the seek value
+                # exceeds the file length, in which case line == b''.
+                shutil.copyfileobj(input, output)
+        except:
+            raise

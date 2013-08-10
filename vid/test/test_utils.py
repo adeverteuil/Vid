@@ -15,6 +15,8 @@ from .. import *
 
 
 workdir = os.path.abspath(os.path.dirname(__file__))
+header = (b'YUV4MPEG2 W720 H480 F30000:1001 '
+          b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n')
 
 
 class ShotTestCase(unittest.TestCase):
@@ -23,22 +25,20 @@ class ShotTestCase(unittest.TestCase):
         os.chdir(workdir)
 
     def test_shot_init(self):
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(
+            FileNotFoundError,
+            msg="Instanciation of Shot(1)",
+            ):
             shot = Shot(1)
-            self.assertIsInstance(
-                shot,
-                Shot,
-                msg="Instanciation of Shot(1).",
-                )
-            self.assertIsNone(shot.pathname)
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(
+            FileNotFoundError,
+            msg="Instanciation of Shot(\"1\")",
+            ):
             shot = Shot("1")
             self.assertIsInstance(
                 shot,
                 Shot,
-                msg="Instanciation of Shot(\"1\")",
                 )
-            self.assertIsNone(shot.pathname)
         self.assertRaises(ValueError, Shot, "a")
         self.assertEqual(
             Shot(54).name,
@@ -52,6 +52,7 @@ class ShotTestCase(unittest.TestCase):
             )
         with self.assertRaises(FileNotFoundError):
             pathname = Shot(56).name
+        return
 
     @unittest.skip("rewriting code")
     def test_play(self):
@@ -65,79 +66,86 @@ class ShotTestCase(unittest.TestCase):
     def test_shot_repr(self):
         self.assertEqual(
             repr(Shot(54)),
-            "<_io.FileIO name='A roll/testsequence/M2U00054.mpg' mode='rb'>"
+            "<Shot(54), seek=0, dur=None>",
             )
-
-    def test_shot_read(self):
-        shot = Shot(54)
-        self.assertIsInstance(
-            shot.read(4),
-            bytes,
-            )
-        shot.close()
 
     @unittest.skip("rewriting code")
     def test_cut(self):
         shot = Shot(54)
 
         cut = shot.cut(dur=5)
-        self.assertNotIn('-ss', shot.input_args)
-        self.assertNotIn('-ss', shot.output_args)
-        self.assertEqual(shot.output_args['-t'], "5")
+        self.assertEqual(shot.seek, 0)
+        self.assertEqual(shot.dur, 5)
 
         cut = shot.cut(seek=5)
-        self.assertNotIn('-ss', shot.input_args)
-        self.assertEqual(shot.output_args['-ss'], "5")
-        self.assertNotIn('-t', shot.output_args)
+        self.assertEqual(shot.seek, 5)
+        self.assertEqual(shot.dur, None)
 
         cut = shot.cut(5, 6)
-        self.assertNotIn('-ss', shot.input_args)
-        self.assertEqual(shot.output_args['-ss'], "5")
-        self.assertEqual(shot.output_args['-t'], "6")
+        self.assertEqual(shot.seek, 5)
+        self.assertEqual(shot.dur, 6)
 
         cut = shot.cut()
-        self.assertNotIn('-ss', shot.input_args)
-        self.assertNotIn('-ss', shot.output_args)
-        self.assertNotIn('-t', shot.output_args)
+        self.assertEqual(shot.seek, 0)
+        self.assertEqual(shot.dur, None)
 
         cut = shot.cut(45)
-        self.assertEqual(shot.input_args['-ss'], "25")
-        self.assertEqual(shot.output_args['-ss'], "20")
-        self.assertNotIn('-t', shot.output_args)
+        self.assertEqual(shot.seek, 45)
+        self.assertEqual(shot.dur, None)
+
+    def test_shot_remove_header(self):
+        pipe1_r, pipe1_w = os.pipe()
+        pipe2_r, pipe2_w = os.pipe()
+        t = threading.Thread(
+            target=Shot._remove_header,
+            args=(pipe1_r, pipe2_w),
+            )
+        t.start()
+        with open(pipe1_w, "wb") as w:
+            w.write(header)
+            w.write(b'test')
+            w.close()
+        with open(pipe2_r, "rb") as r:
+            self.assertEqual(
+                r.read(),
+                b'test',
+                )
+            self.assertEqual(
+                r.read(),
+                b'',
+                )
+        self.assertFalse(t.is_alive())
 
     def test_shot_demux(self):
-        pipe_r, pipe_w = os.pipe()
-        print("Pipes {} and {}.".format(pipe_r, pipe_w))
-        with open(pipe_w, "wb") as pipe_w:
-            with Shot(54) as shot, \
-            open(pipe_r, "rb") as f:
-                shot.demux(video=pipe_w)
-                self.assertEqual(
-                    f.readline(),
-                    b'YUV4MPEG2 W720 H480 F30000:1001 '
-                    b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
-                    )
-                self.assertEqual(
-                    f.readline(),
-                    b'FRAME\n',
-                    )
-        pipe_r, pipe_w = os.pipe()
-        print("Pipes {} and {}.".format(pipe_r, pipe_w))
-        #with open(pipe_w, "wb") as pipe_w:
-        with Shot(54) as shot, \
-        open(pipe_r, "rb") as f:
-            shot.demux(video=pipe_w, remove_header=True)
-            self.assertEqual(
-                f.readline(),
-                b'FRAME\n',
-                )
-            with open("testfile", "wb") as dn:
-                dn.write(
-                    b'YUV4MPEG2 W720 H480 F30000:1001 '
-                    b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
-                    )
-                dn.write(b'FRAME\n')
-                shutil.copyfileobj(f, dn)
+        shot = Shot(54)
+        shot.cut(5, 1)
+        shot.demux(audio=False)
+        self.assertEqual(
+            shot.v_stream.readline(),
+            header
+            )
+        self.assertEqual(
+            shot.v_stream.readline(),
+            b'FRAME\n',
+            )
+        with open(os.devnull, "wb") as dn:
+            # Pipe the rest of the file in os.devnull to be sure there
+            # is no blocking.
+            shutil.copyfileobj(shot.v_stream, dn)
+        shot.v_stream.close()
+
+        shot = Shot(54)
+        shot.cut(5, 1)
+        shot.demux(audio=False, remove_header=True)
+        self.assertEqual(
+            shot.v_stream.readline(),
+            b'FRAME\n',
+            )
+        with open(os.devnull, "wb") as dn:
+            # Pipe the rest of the file in os.devnull to be sure there
+            # is no blocking.
+            shutil.copyfileobj(shot.v_stream, dn)
+        shot.v_stream.close()
 
     @unittest.skip("rewriting code")
     def test_cat(self):
