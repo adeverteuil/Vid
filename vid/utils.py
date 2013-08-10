@@ -70,6 +70,9 @@ class Shot(io.FileIO):
             logger.exception("That's a new exception?!")
         super().__init__(pathname, "rb")
 
+    def cut(self):
+        pass
+
     def demux(self, video=None, audio=None, remove_header=False):
         """Write video and audio to the provided keyword arguments."""
         assert video or audio
@@ -119,16 +122,57 @@ class Shot(io.FileIO):
             stdin=self,
             )
 
-    def cut(self):
+    def _remove_header(self, input, output):
+        # It seems that the terminating subprocess does not close
+        # the passed writable file descriptor on the way out, thus
+        # making the use of select.select() unavoidable.
+        # I shall find out if it is possible to make Popen close such
+        # file descriptors.
+        with open(input, "rb", buffering=0) as input, open(output, "wb") as output:
+            line = input.readline()
+            assert line == (
+                b'YUV4MPEG2 W720 H480 F30000:1001 '
+                b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
+                ), line
+            # An AssertionError here might mean that the seek_time value
+            # exceeds the file length, in which case line == b''.
+            try:
+                #shutil.copyfileobj(input, output)
+                # commented out copyfileobj. It blocks because the
+                # subprocess does not close the pipe.
+                while True:
+                    rlist, wlist, xlist = select.select([input], [], [], 0.1)
+                    if rlist:
+                        buf = input.read(16*1024)
+                        if buf == b'':
+                            break
+                        output.write(buf)
+                    else:
+                        if self.process.poll() is not None:
+                            break
+            except BrokenPipeError:
+                # Caller closed output reader pipe.
+                pass
+            #except OSError:
+            #    pass
+
+    def close(self):
+        if self.process and self.process.poll() is None:
+            self.process.kill()
+            self.process.wait()
+        super().close()
+
+
+class Demuxer(Shot):
+    """Demultiplexes and decodes an mpg file, produces raw audio and video."""
+    def __init__():
         pass
 
 
-class Demuxer():
-    pass
-
-
 class Muxer():
-    pass
+    """Compresses raw audio and video, multiplexes and outputs one movie."""
+    def __init__():
+        pass
 
 
 class Black(Shot):
