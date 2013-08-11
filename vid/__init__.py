@@ -7,6 +7,7 @@
 import os
 import logging
 import logging.config
+import textwrap
 
 
 from .utils import *
@@ -33,13 +34,48 @@ except FileNotFoundError:
 os.mkdir("log")
 
 
+msg_indent = textwrap.TextWrapper(
+    width=79,
+    expand_tabs=True,
+    tabsize=4,
+    replace_whitespace=False,
+    initial_indent="    ",
+    subsequent_indent="    ",
+    break_on_hyphens=False,
+    )
+
+
+class CustomFormatter(logging.Formatter):
+    """Wraps long lines in log messages and indents by 4 spaces.
+
+    Example log entry:
+    2013-08-11 19:02:41,231 - DEBUG - vid.utils.Multiplexer
+        Subprocess pid 14479:
+        ['ffmpeg', '-y', '-f', 'yuv4mpegpipe', '-vcodec', 'rawvideo',
+        '-i', 'pipe:4', '-f', 'u16le', '-acodec', 'pcm_s16le', '-ac',
+        '2', '-ar', '44100', '-i', 'pipe:6', '-f', 'avi', '-vcodec',
+        'libx264', '-crf', '23', '-preset', 'medium', '-acodec', 'mp3',
+        '-strict', 'experimental', '-ac', '2', '-ar', '44100', '-ab',
+        '128k', '-qscale:v', '6', 'pipe:1']
+
+    """
+    def format(self, record):
+        #import pdb; pdb.set_trace()
+        msg = []
+        for line in record.msg.split("\n"):
+            msg.append(msg_indent.fill(line))
+        record.msg = "\n".join(msg)
+        return super().format(record)
+
+
 formatters = {
     'sf': {
         'format': "{levelname} - {name} - {message}",
         'style': "{",
         },
     'ff': {
-        'format': "{asctime} - {levelname} - {name}\n    {message}",
+        'format': "{asctime} - {levelname} - {name}\n{message}",
+        '()': CustomFormatter,
         'style': "{",
         },
     }
@@ -69,9 +105,9 @@ d = {
 logging.config.dictConfig(d)
 
 
-logger = logging.getLogger(__name__)
-logger.debug('Test debug message')
-logger.info('Test info message')
-logger.warn('Test warn message')
-logger.error('Test error message')
-logger.critical('Test critical message')
+#logger = logging.getLogger(__name__)
+#logger.debug('Test debug message')
+#logger.info('Test info message')
+#logger.warn('Test warn message')
+#logger.error('Test error message')
+#logger.critical('Test critical message')

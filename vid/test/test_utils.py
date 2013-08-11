@@ -212,13 +212,23 @@ class UtilsTestCase(unittest.TestCase):
         p.wait()
 
     def test_cat(self):
+        logger = logging.getLogger(__name__+".test_cat")
+        logger.debug("Testing Cat.")
         cat = Cat()
         cat.append(Shot(54).cut(6, 1))
         cat.append(Shot(54).cut(5, 1))
         cat.append(Shot(54).cut(4, 1))
         cat.process()
+        logger.debug(
+            "cat.v_stream = {}\n"
+            "cat.a_stream = {}".format(
+                cat.v_stream,
+                cat.a_stream,
+                )
+            )
         muxer = Multiplexer(cat.v_stream, cat.a_stream)
         s = muxer.mux()
+        logger.debug("muxer output = {}".format(s))
         with open("testfile", "wb") as f:
             shutil.copyfileobj(s, f)
         #player = Player(s)

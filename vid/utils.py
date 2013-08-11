@@ -170,7 +170,7 @@ class Shot():         #{{{
             os.close(fd)
         self.logger.debug(
             SUBPROCESS_LOG.format(
-                self.process.pid, pprint.pformat(args, indent=4)
+                self.process.pid, args
                 )
             )
 
@@ -261,6 +261,7 @@ class Player():       #{{{
 
     """
     def __init__(self, file):
+        self.logger = logging.getLogger(__name__+".Player")
         args = ["ffplay", "-autoexit"]
         pass_fds = ()
         # Find out what is file.
@@ -282,15 +283,16 @@ class Player():       #{{{
             )
         for fd in pass_fds:
             os.close(fd)
-        logger.debug(
+        self.logger.debug(
             SUBPROCESS_LOG.format(
-                self.process.pid, pprint.pformat(args, indent=4)
+                self.process.pid, args
                 )
             )
 
 #}}}
 class Multiplexer():  #{{{
     def __init__(self, v_stream, a_stream):
+        self.logger = logging.getLogger(__name__+".Multiplexer")
         self.v_stream = self._get_fileno(v_stream)
         self.a_stream = self._get_fileno(a_stream)
 
@@ -312,6 +314,11 @@ class Multiplexer():  #{{{
             )
         os.close(self.v_stream)
         os.close(self.a_stream)
+        self.logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, args
+                )
+            )
         return self.process.stdout
 
     @staticmethod
