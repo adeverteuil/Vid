@@ -24,6 +24,14 @@ RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-an"]
 RAW_AUDIO = ["-f", "u16le", "-acodec", "pcm_s16le",
     "-ac", "2", "-ar", "44100", "-vn"]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
+OUTPUT_FORMAT = [
+    "-f", "avi",
+    "-vcodec", "libx264",
+    "-crf", "23", "-preset", "medium",
+    "-acodec", "mp3", "-strict", "experimental",
+    "-ac", "2", "-ar", "44100", "-ab", "128k",
+    "-qscale:v", "6",
+    ]
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +50,7 @@ def _redirect_stderr_to_log_file():
     os.dup2(file.fileno(), sys.stderr.fileno())
 
 
-class Shot():    #{{{
+class Shot():         #{{{
     """Abstraction for a movie file copied from the camcorder."""
     def __init__(self, number):
         self.logger = logging.getLogger(__name__+".Shot")
@@ -84,6 +92,8 @@ class Shot():    #{{{
             assert isinstance(seek, (int, float))
         self.seek = seek
         self.dur = dur
+        return self
+        # This allows the method call Cat().append(Shot(#).cut(seek, dur))
 
     def _probe(self):
         pass
@@ -99,6 +109,7 @@ class Shot():    #{{{
         assert video or audio
         args = ["ffmpeg", "-y"]
         write_fds = []
+        logger.info("demuxing {}".format(self))
 
         # Define input arguments
         if (FASTSEEK_THRESHOLD is not None and
@@ -114,6 +125,7 @@ class Shot():    #{{{
 
         # Define output arguments
         if video:
+            args += ["-filter:v", "yadif"]
             if remove_header:
                 video1_r, video1_w = os.pipe()
                 video2_r, video2_w = os.pipe()
@@ -127,8 +139,7 @@ class Shot():    #{{{
                     args += ["-ss", str(seek)]
                 if self.dur:
                     args += ["-t", str(self.dur)]
-                args += (RAW_VIDEO +
-                         ["-filter:v", "yadif", "pipe:{}".format(video1_w)])
+                args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
                 t.start()
             else:
                 video_fdr, video_fdw = os.pipe()
@@ -144,6 +155,7 @@ class Shot():    #{{{
             write_fds.append(audio_fdw)
             self.a_stream = open(audio_fdr, "rb")
             args += RAW_AUDIO + ["pipe:{}".format(audio_fdw)]
+        logger.debug("Demuxing video {} and audio {}".format(self.v_stream, self.a_stream))
 
         # Create subprocess
         self.process = subprocess.Popen(
@@ -176,17 +188,72 @@ class Shot():    #{{{
             raise
 
 #}}}
-class Cat():     #{{{
+class Cat():          #{{{
     """Concatenate supplied Shot objects, provide read pipes.
 
     Caller is responsible for closing the pipes.
 
     """
-    def __init__():
-        pass
+    def __init__(self):
+        self.v_stream = None
+        self.a_stream = None
+        self.sequence = []
+
+    def append(self, shot):
+        self.sequence += [shot]
+
+    def process(self):
+        vpipe_r, self._vpipe_w = os.pipe()
+        apipe_r, self._apipe_w = os.pipe()
+        self.v_stream = open(vpipe_r, "rb")
+        self.a_stream = open(apipe_r, "rb")
+        self.thread = threading.Thread(
+            target=self._process_thread,
+            )
+        self.thread.start()
+
+    def _process_thread(self):
+        v_queue = queue.Queue(maxsize=2)
+        v_thread = threading.Thread(
+            target=self._concatenate_streams,
+            args=(v_queue, open(self._vpipe_w, "wb"))
+            )
+        v_thread.start()
+        a_queue = queue.Queue(maxsize=2)
+        a_thread = threading.Thread(
+            target=self._concatenate_streams,
+            args=(a_queue, open(self._apipe_w, "wb")),
+            )
+        a_thread.start()
+        i = 0
+        for shot in self.sequence:
+            shot.demux(remove_header=i)
+            i += 1
+            v_queue.put(shot.v_stream)
+            a_queue.put(shot.a_stream)
+        v_queue.put(False)
+        a_queue.put(False)
+
+    @staticmethod
+    def _concatenate_streams(queue, output):
+        #import pdb; pdb.set_trace()
+        while True:
+            i = queue.get()
+            if i:
+                logger.debug("Concatenating {} to {}.".format(i, output))
+                shutil.copyfileobj(i, output)
+                #while True:
+                #    buf = i.read(16*1024)
+                #    if buf == b'':
+                #        break
+                #    output.write(buf)
+                i.close()
+            else:
+                break
+        output.close()
 
 #}}}
-class Player():  #{{{
+class Player():       #{{{
     """ffplay
 
     Argument can be a path name sting, an int or a file object
@@ -220,3 +287,41 @@ class Player():  #{{{
                 self.process.pid, pprint.pformat(args, indent=4)
                 )
             )
+
+#}}}
+class Multiplexer():  #{{{
+    def __init__(self, v_stream, a_stream):
+        self.v_stream = self._get_fileno(v_stream)
+        self.a_stream = self._get_fileno(a_stream)
+
+    def mux(self):
+        logger.debug("Muxing video {} and audio {}.".format(
+            self.v_stream, self.a_stream))
+        args = [
+            "ffmpeg", "-y",
+            ] + RAW_VIDEO[:-1] + ["-i", "pipe:{}".format(self.v_stream),
+            ] + RAW_AUDIO[:-1] + ["-i", "pipe:{}".format(self.a_stream),
+            ] + OUTPUT_FORMAT + ["pipe:1",
+            ]
+        self.process = subprocess.Popen(
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            pass_fds=(self.v_stream, self.a_stream),
+            )
+        os.close(self.v_stream)
+        os.close(self.a_stream)
+        return self.process.stdout
+
+    @staticmethod
+    def _get_fileno(file):
+        # Find out what is file.
+        if isinstance(file, int):
+            return file
+        else:
+            try:
+                return file.fileno()
+            except AttributeError:
+                return None
+#}}}

@@ -14,9 +14,12 @@ from .utils import *
 
 __all__ = [
     #"Editor",
-    "Shot",
     "RAW_AUDIO",
     "RAW_VIDEO",
+    "Shot",
+    "Player",
+    "Cat",
+    "Multiplexer",
     #"Stream",
     #"VideoStream",
     #"AudioStream",

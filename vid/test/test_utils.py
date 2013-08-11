@@ -5,6 +5,7 @@
 
 
 import io
+import queue
 import shutil
 import os.path
 import logging
@@ -20,7 +21,7 @@ header = (b'YUV4MPEG2 W720 H480 F30000:1001 '
           b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n')
 
 
-class ShotTestCase(unittest.TestCase):
+class UtilsTestCase(unittest.TestCase):
 
     def setUp(self):
         os.chdir(workdir)
@@ -155,8 +156,8 @@ class ShotTestCase(unittest.TestCase):
         shot.cut(5, 1)
         shot.demux(audio=False)
         self.assertEqual(
-            shot.v_stream.readline(),
-            header
+            shot.v_stream.readline()[0:9],
+            b'YUV4MPEG2',
             )
         self.assertEqual(
             shot.v_stream.readline(),
@@ -210,76 +211,40 @@ class ShotTestCase(unittest.TestCase):
         shot.v_stream.close()
         p.wait()
 
-    @unittest.skip("rewriting code")
     def test_cat(self):
-        # Test the _cat private method.
-        fifos = [
-            "vid_clip_0_v", "vid_clip_1_v",
-            "vid_clip_0_a", "vid_clip_1_a",
-            "vid_cat_v", "vid_cat_a",
-            ]
-        for fifo in fifos:
-            try:
-                os.mkfifo(fifo)
-            except FileExistsError:
-                pass
-        shot1 = Shot(54)
-        shot1.cut(6, 5)
-        shot2 = Shot(54)
-        shot2.cut(3, 5)
-        shot1.process(video=fifos[0])
-        shot2.process(video=fifos[1], remove_header=True)
-        shot1.process(audio=fifos[2])
-        shot2.process(audio=fifos[3])
         cat = Cat()
-        cat._cat(fifos[0:2], os.devnull)  # Concatenate video.
-        cat._cat(fifos[2:4], os.devnull)  # Concatenate audio.
+        cat.append(Shot(54).cut(6, 1))
+        cat.append(Shot(54).cut(5, 1))
+        cat.append(Shot(54).cut(4, 1))
+        cat.process()
+        muxer = Multiplexer(cat.v_stream, cat.a_stream)
+        s = muxer.mux()
+        with open("testfile", "wb") as f:
+            shutil.copyfileobj(s, f)
+        #player = Player(s)
+        #s.close()
+        #player.process.wait()
 
-        # Test the merge process.
-        shot1.process(video=fifos[0])
-        shot1.process(audio=fifos[1])
-        cat._merge_streams(fifos[0], fifos[1], os.devnull)
-
-        # Test _cat and _merge_streams together.
-        shot1.process(video=fifos[0])
-        shot2.process(video=fifos[1], remove_header=True)
-        shot1.process(audio=fifos[2])
-        shot2.process(audio=fifos[3])
-        cat = Cat()
-        thread_v = threading.Thread(  # Concatenate video.
-            target=cat._cat,
-            args=(fifos[0:2], fifos[4]),
+    def test_cat_concatenate_streams(self):
+        q = queue.Queue()
+        p1r, p1w = os.pipe()
+        p2r, p2w = os.pipe()
+        p3r, p3w = os.pipe()
+        q.put(open(p1r, "rb"))
+        q.put(open(p2r, "rb"))
+        q.put(False)
+        os.write(p1w, b'asdf\n')
+        os.write(p2w, b'fdsa\n')
+        os.close(p1w)
+        os.close(p2w)
+        t = threading.Thread(
+            target=Cat._concatenate_streams,
+            args=(q, open(p3w, "wb")),
             )
-        thread_v.start()
-        thread_a = threading.Thread(  # Concatenate audio.
-            target=cat._cat,
-            args=(fifos[2:4], fifos[5]),
-            )
-        thread_a.start()
-        cat._merge_streams(fifos[4], fifos[5], os.devnull)
-
-        # Test the whole process.
-        # One clip.
-        cat = Cat()
-        shot = Shot(54)
-        shot.cut(0, 1)
-        cat.append(shot)
+        t.start()
         self.assertEqual(
-            cat.sequence,
-            [shot]
+            os.read(p3r, 1024),
+            b'asdf\nfdsa\n',
             )
-        shot2 = Shot(54)
-        shot2.cut(5, 0.2)
-        cat.append(shot2)
-        self.assertEqual(
-            cat.sequence,
-            [shot, shot2]
-            )
-        shot3 = Shot(54)
-        shot3.cut(4, .1)
-        cat.append(shot3)
-        self.assertEqual(
-            cat.sequence,
-            [shot, shot2, shot3]
-            )
-        cat.process(os.devnull)
+        t.join()
+        os.close(p3r)
