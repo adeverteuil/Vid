@@ -72,6 +72,9 @@ class Shot():
 
     def cut(self, seek=0, dur=None):
         """Sets the starting position and duration of the required frames."""
+        assert isinstance(seek, (int, float))
+        if dur is not None:
+            assert isinstance(seek, (int, float))
         self.seek = seek
         self.dur = dur
 
@@ -115,7 +118,10 @@ class Shot():
                 self.v_stream = open(video2_r, "rb")
                 if seek:
                     args += ["-ss", str(seek)]
-                args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
+                if self.dur:
+                    args += ["-t", str(self.dur)]
+                args += (RAW_VIDEO + 
+                         ["-filter:v", "yadif", "pipe:{}".format(video1_w)])
                 t.start()
             else:
                 video_fdr, video_fdw = os.pipe()
@@ -123,6 +129,8 @@ class Shot():
                 self.v_stream = open(video_fdr, "rb")
                 if seek:
                     args += ["-ss", str(seek)]
+                if self.dur:
+                    args += ["-t", str(self.dur)]
                 args += RAW_VIDEO + ["pipe:{}".format(video_fdw)]
         if audio:
             audio_fdr, audio_fdw = os.pipe()
@@ -147,10 +155,8 @@ class Shot():
         try:
             with open(input, "rb") as input, open(output, "wb") as output:
                 line = input.readline()
-                assert line == (
-                    b'YUV4MPEG2 W720 H480 F30000:1001 '
-                    b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n'
-                    ), line
+                assert line[0:9] == b'YUV4MPEG2' and line[-1:] == b'\n', \
+                    [line, line[0:9], line[-1]]
                 # An AssertionError here might mean that the seek value
                 # exceeds the file length, in which case line == b''.
                 shutil.copyfileobj(input, output)

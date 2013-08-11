@@ -69,29 +69,34 @@ class ShotTestCase(unittest.TestCase):
             "<Shot(54), seek=0, dur=None>",
             )
 
-    @unittest.skip("rewriting code")
     def test_cut(self):
         shot = Shot(54)
 
-        cut = shot.cut(dur=5)
+        shot.cut(dur=5)
         self.assertEqual(shot.seek, 0)
         self.assertEqual(shot.dur, 5)
 
-        cut = shot.cut(seek=5)
+        shot.cut(seek=5)
         self.assertEqual(shot.seek, 5)
         self.assertEqual(shot.dur, None)
 
-        cut = shot.cut(5, 6)
+        shot.cut(5, 6)
         self.assertEqual(shot.seek, 5)
         self.assertEqual(shot.dur, 6)
 
-        cut = shot.cut()
+        shot.cut()
         self.assertEqual(shot.seek, 0)
         self.assertEqual(shot.dur, None)
 
-        cut = shot.cut(45)
+        shot.cut(45)
         self.assertEqual(shot.seek, 45)
         self.assertEqual(shot.dur, None)
+
+        self.assertRaises(
+            AssertionError,
+            shot.cut,
+            "1",
+            )
 
     def test_shot_remove_header(self):
         pipe1_r, pipe1_w = os.pipe()
@@ -114,9 +119,11 @@ class ShotTestCase(unittest.TestCase):
                 r.read(),
                 b'',
                 )
+        t.join(timeout=0.1)
         self.assertFalse(t.is_alive())
 
     def test_shot_demux(self):
+        # With header.
         shot = Shot(54)
         shot.cut(5, 1)
         shot.demux(audio=False)
@@ -134,6 +141,7 @@ class ShotTestCase(unittest.TestCase):
             shutil.copyfileobj(shot.v_stream, dn)
         shot.v_stream.close()
 
+        # Without header.
         shot = Shot(54)
         shot.cut(5, 1)
         shot.demux(audio=False, remove_header=True)
@@ -146,6 +154,31 @@ class ShotTestCase(unittest.TestCase):
             # is no blocking.
             shutil.copyfileobj(shot.v_stream, dn)
         shot.v_stream.close()
+
+        # Close buffer before EOF.
+        shot = Shot(54)
+        shot.cut(5, 1)
+        shot.demux(audio=False)
+        b = shot.v_stream.read(1024)
+        shot.v_stream.close()
+        shot.process.wait()
+        del b
+
+        # Play it.
+        shot = Shot(54)
+        shot.cut(6, 1)
+        shot.demux(audio=False)
+        args = (["ffplay", "-autoexit"] + RAW_VIDEO + 
+                ["-i", "pipe:{}".format(shot.v_stream.fileno())])
+        p = subprocess.Popen(
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            pass_fds=(shot.v_stream.fileno(),), # shot.a_stream.fileno()),
+            )
+        shot.v_stream.close()
+        p.wait()
 
     @unittest.skip("rewriting code")
     def test_cat(self):
