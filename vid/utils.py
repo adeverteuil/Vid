@@ -36,7 +36,7 @@ def cleanup():
     logging.shutdown()
 
 
-class Shot():  #{{{
+class Shot():    #{{{
     """Abstraction for a movie file copied from the camcorder."""
     def __init__(self, number):
         self.number = int(number)
@@ -164,3 +164,30 @@ class Shot():  #{{{
             raise
 
 #}}}
+class Player():  #{{{
+    """ffplay
+
+    Argument can be a path name sting, an int or a file object
+
+    """
+    def __init__(self, file):
+        args = ["ffplay", "-autoexit"]
+        pass_fds = ()
+        # Find out what is file.
+        if isinstance(file, str):
+            args.append(file)
+        if isinstance(file, int):
+            args.append("pipe:{}".format(file))
+            pass_fds = (file,)
+        if isinstance(file.fileno(), int):
+            args.append("pipe:{}".format(file.fileno()))
+            pass_fds = (file.fileno(),)
+        self.process = subprocess.Popen(
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            pass_fds=pass_fds,
+            )
+        for fd in pass_fds:
+            os.close(fd)

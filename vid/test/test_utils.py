@@ -54,14 +54,15 @@ class ShotTestCase(unittest.TestCase):
             pathname = Shot(56).name
         return
 
-    @unittest.skip("rewriting code")
     def test_play(self):
         shot = Shot(54)
-        #shot.play()
-        shot.cut(6, 1)
-        shot.play()
-        #with self.assertRaises(subprocess.SubprocessError):
-        #    shot.play("a")
+        shot.cut(7, 1)
+        shot.demux(audio=False)
+        player = Player(shot.v_stream)
+        self.assertEqual(
+            player.process.wait(),
+            0
+            )
 
     def test_shot_repr(self):
         self.assertEqual(
