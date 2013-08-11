@@ -36,7 +36,7 @@ def cleanup():
     logging.shutdown()
 
 
-class Shot():
+class Shot():  #{{{
     """Abstraction for a movie file copied from the camcorder."""
     def __init__(self, number):
         self.number = int(number)
@@ -162,3 +162,5 @@ class Shot():
                 shutil.copyfileobj(input, output)
         except:
             raise
+
+#}}}
