@@ -83,11 +83,11 @@ class Shot():    #{{{
 
     def demux(self, video=True, audio=True, remove_header=False):
         """Write video and audio as specified. Sets v_stream and a_stream.
-        
+
         This method will demultiplex the shot and pipe the raw video and audio
         streams to those files. The caller is responsible for closing
         the files.
-        
+
         """
         assert video or audio
         args = ["ffmpeg", "-y"]
@@ -120,7 +120,7 @@ class Shot():    #{{{
                     args += ["-ss", str(seek)]
                 if self.dur:
                     args += ["-t", str(self.dur)]
-                args += (RAW_VIDEO + 
+                args += (RAW_VIDEO +
                          ["-filter:v", "yadif", "pipe:{}".format(video1_w)])
                 t.start()
             else:
@@ -164,10 +164,21 @@ class Shot():    #{{{
             raise
 
 #}}}
+class Cat():     #{{{
+    """Concatenate supplied Shot objects, provide read pipes.
+
+    Caller is responsible for closing the pipes.
+
+    """
+    def __init__():
+        pass
+
+#}}}
 class Player():  #{{{
     """ffplay
 
     Argument can be a path name sting, an int or a file object
+    which has a fileno() method.
 
     """
     def __init__(self, file):
