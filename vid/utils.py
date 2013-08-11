@@ -9,6 +9,7 @@ import io
 import sys
 import glob
 import queue
+import pprint
 import shutil
 import select
 import atexit
@@ -22,13 +23,11 @@ FASTSEEK_THRESHOLD = 30  # Seconds
 RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-an"]
 RAW_AUDIO = ["-f", "u16le", "-acodec", "pcm_s16le",
     "-ac", "2", "-ar", "44100", "-vn"]
+SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
+
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-h = logging.StreamHandler()
-h.setLevel(logging.DEBUG)
-logger.addHandler(h)
-logger.info("Logging started.")
+logdir = os.getcwd() + "/log"
 
 
 @atexit.register
@@ -36,9 +35,17 @@ def cleanup():
     logging.shutdown()
 
 
+def _redirect_stderr_to_log_file():
+    # This function is passed as the preexec_fn to subprocess.Popen
+    pid = os.getpid()
+    file = open(logdir+"/{}.log".format(pid), "w")
+    os.dup2(file.fileno(), sys.stderr.fileno())
+
+
 class Shot():    #{{{
     """Abstraction for a movie file copied from the camcorder."""
     def __init__(self, number):
+        self.logger = logging.getLogger(__name__+".Shot")
         self.number = int(number)
         self.seek = 0
         self.dur = None
@@ -61,7 +68,7 @@ class Shot():    #{{{
                 "Pattern is \"{}\".".format(self.number, pattern)
                 ) from err
         except :
-            logger.exception("That's a new exception?!")
+            self.logger.exception("That's a new exception?!")
 
     def __repr__(self):
         return "<Shot({}), seek={}, dur={}>".format(
@@ -142,13 +149,18 @@ class Shot():    #{{{
         self.process = subprocess.Popen(
             args,
             pass_fds=write_fds,
-            stderr=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
+            preexec_fn=_redirect_stderr_to_log_file,
             )
         for fd in write_fds:
             # Close write file descriptors.
             os.close(fd)
+        self.logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, pprint.pformat(args, indent=4)
+                )
+            )
 
     @staticmethod
     def _remove_header(input, output):
@@ -199,6 +211,12 @@ class Player():  #{{{
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             pass_fds=pass_fds,
+            preexec_fn=_redirect_stderr_to_log_file,
             )
         for fd in pass_fds:
             os.close(fd)
+        logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, pprint.pformat(args, indent=4)
+                )
+            )

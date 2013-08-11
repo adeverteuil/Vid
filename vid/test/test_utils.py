@@ -7,6 +7,7 @@
 import io
 import shutil
 import os.path
+import logging
 import unittest
 import threading
 import subprocess
@@ -24,7 +25,21 @@ class ShotTestCase(unittest.TestCase):
     def setUp(self):
         os.chdir(workdir)
 
+    def tearDown(self):
+        logger = logging.getLogger(__name__+".tearDown")
+        fds = os.listdir("/proc/self/fd")
+        std = ["0", "1", "2"]
+        if sorted(fds) != std:
+            for fd in std:
+                try:
+                    fds.remove(fd)
+                except ValueError:
+                    pass
+            logger.warning("File descriptors left opened: {}.".format(fds))
+
     def test_shot_init(self):
+        logger = logging.getLogger(__name__+".test_shot_init")
+        logger.debug("Testing Shot.__init__")
         with self.assertRaises(
             FileNotFoundError,
             msg="Instanciation of Shot(1)",
@@ -54,7 +69,9 @@ class ShotTestCase(unittest.TestCase):
             pathname = Shot(56).name
         return
 
-    def test_play(self):
+    def test_player(self):
+        logger = logging.getLogger(__name__+".test_play")
+        logger.debug("Testing Player")
         shot = Shot(54)
         shot.cut(7, 1)
         shot.demux(audio=False)
@@ -65,12 +82,16 @@ class ShotTestCase(unittest.TestCase):
             )
 
     def test_shot_repr(self):
+        logger = logging.getLogger(__name__+".test_shot_repr")
+        logger.debug("Testing Shot.__repr__")
         self.assertEqual(
             repr(Shot(54)),
             "<Shot(54), seek=0, dur=None>",
             )
 
     def test_cut(self):
+        logger = logging.getLogger(__name__+".test_cut")
+        logger.debug("Testing Shot.cut")
         shot = Shot(54)
 
         shot.cut(dur=5)
@@ -100,6 +121,8 @@ class ShotTestCase(unittest.TestCase):
             )
 
     def test_shot_remove_header(self):
+        logger = logging.getLogger(__name__+".test_shot_remove_header")
+        logger.debug("Testing Shot._remove_header")
         pipe1_r, pipe1_w = os.pipe()
         pipe2_r, pipe2_w = os.pipe()
         t = threading.Thread(
@@ -124,7 +147,10 @@ class ShotTestCase(unittest.TestCase):
         self.assertFalse(t.is_alive())
 
     def test_shot_demux(self):
+        logger = logging.getLogger(__name__+".test_shot_demux")
+        logger.debug("Testing Shot.demux().")
         # With header.
+        logger.debug("Testing with header.")
         shot = Shot(54)
         shot.cut(5, 1)
         shot.demux(audio=False)
@@ -143,6 +169,7 @@ class ShotTestCase(unittest.TestCase):
         shot.v_stream.close()
 
         # Without header.
+        logger.debug("Testing without header.")
         shot = Shot(54)
         shot.cut(5, 1)
         shot.demux(audio=False, remove_header=True)
@@ -157,6 +184,7 @@ class ShotTestCase(unittest.TestCase):
         shot.v_stream.close()
 
         # Close buffer before EOF.
+        logger.debug("Test with closing buffer before EOF.")
         shot = Shot(54)
         shot.cut(5, 1)
         shot.demux(audio=False)
@@ -166,6 +194,7 @@ class ShotTestCase(unittest.TestCase):
         del b
 
         # Play it.
+        logger.debug("Test playing the file")
         shot = Shot(54)
         shot.cut(6, 1)
         shot.demux(audio=False)
