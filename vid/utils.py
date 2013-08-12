@@ -48,6 +48,7 @@ def _redirect_stderr_to_log_file():
     pid = os.getpid()
     file = open(logdir+"/{}.log".format(pid), "w")
     os.dup2(file.fileno(), sys.stderr.fileno())
+    file.write("stderr stream from process id {}:\n\n".format(pid))
 
 
 class Shot():         #{{{
@@ -129,6 +130,13 @@ class Shot():         #{{{
             if remove_header:
                 video1_r, video1_w = os.pipe()
                 video2_r, video2_w = os.pipe()
+                self.logger.debug(
+                    "Video pipes created:\n"
+                    "subprocess {} -> {} _remove_headers;\n"
+                    "_remove_headers {} -> {} self.v_stream.".format(
+                        video1_w, video1_r, video2_w, video2_r
+                        )
+                    )
                 t = threading.Thread(
                     target=self._remove_header,
                     args=(video1_r, video2_w),
@@ -143,6 +151,12 @@ class Shot():         #{{{
                 t.start()
             else:
                 video_fdr, video_fdw = os.pipe()
+                self.logger.debug(
+                    "Video pipe created:\n"
+                    "subprocess {} -> {} self.v_stream.".format(
+                        video_fdw, video_fdr
+                        )
+                    )
                 write_fds.append(video_fdw)
                 self.v_stream = open(video_fdr, "rb")
                 if seek:
@@ -155,7 +169,12 @@ class Shot():         #{{{
             write_fds.append(audio_fdw)
             self.a_stream = open(audio_fdr, "rb")
             args += RAW_AUDIO + ["pipe:{}".format(audio_fdw)]
-        logger.debug("Demuxing video {} and audio {}".format(self.v_stream, self.a_stream))
+            self.logger.debug(
+                "Audio pipe created:\n"
+                "subprocess {} -> {} self.a_stream.".format(
+                    audio_fdw, audio_fdr
+                    )
+                )
 
         # Create subprocess
         self.process = subprocess.Popen(
@@ -165,17 +184,24 @@ class Shot():         #{{{
             stdin=subprocess.DEVNULL,
             preexec_fn=_redirect_stderr_to_log_file,
             )
-        for fd in write_fds:
-            # Close write file descriptors.
-            os.close(fd)
         self.logger.debug(
             SUBPROCESS_LOG.format(
                 self.process.pid, args
                 )
             )
+        for fd in write_fds:
+            # Close write file descriptors.
+            os.close(fd)
+            self.logger.debug("closed fd {}.".format(fd))
 
     @staticmethod
     def _remove_header(input, output):
+        logger = logging.getLogger(__name__+".Shot._remove_header")
+        logger.debug(
+            "Removing header from {}, piping the rest through {}.".format(
+                input, output
+                )
+            )
         try:
             with open(input, "rb") as input, open(output, "wb") as output:
                 line = input.readline()
@@ -195,6 +221,7 @@ class Cat():          #{{{
 
     """
     def __init__(self):
+        self.logger = logging.getLogger(__name__+".Cat")
         self.v_stream = None
         self.a_stream = None
         self.sequence = []
@@ -207,6 +234,12 @@ class Cat():          #{{{
         apipe_r, self._apipe_w = os.pipe()
         self.v_stream = open(vpipe_r, "rb")
         self.a_stream = open(apipe_r, "rb")
+        self.logger.debug(
+            "Video pipe created:\nwrite to {}, read from {}\n"
+            "Audio pipe created:\nwrite to {}, read from {}".format(
+                self._vpipe_w, vpipe_r, self._apipe_w, apipe_r
+                )
+            )
         self.thread = threading.Thread(
             target=self._process_thread,
             )
@@ -231,11 +264,18 @@ class Cat():          #{{{
             i += 1
             v_queue.put(shot.v_stream)
             a_queue.put(shot.a_stream)
+            self.logger.debug(
+                "Demultiplexing {}\n"
+                "Reading video from {} and audio from {}".format(
+                    shot, shot.v_stream, shot.a_stream
+                    )
+                )
         v_queue.put(False)
         a_queue.put(False)
 
     @staticmethod
     def _concatenate_streams(queue, output):
+        logger = logging.getLogger(__name__+".Cat")
         #import pdb; pdb.set_trace()
         while True:
             i = queue.get()
@@ -248,9 +288,11 @@ class Cat():          #{{{
                 #        break
                 #    output.write(buf)
                 i.close()
+                logger.debug("Finished reading {} and closed it.".format(i))
             else:
                 break
         output.close()
+        logger.debug("Closed {}.".format(output))
 
 #}}}
 class Player():       #{{{
@@ -281,13 +323,14 @@ class Player():       #{{{
             pass_fds=pass_fds,
             preexec_fn=_redirect_stderr_to_log_file,
             )
-        for fd in pass_fds:
-            os.close(fd)
         self.logger.debug(
             SUBPROCESS_LOG.format(
                 self.process.pid, args
                 )
             )
+        for fd in pass_fds:
+            os.close(fd)
+            self.logger.debug("Closed fd {}.".format(fd))
 
 #}}}
 class Multiplexer():  #{{{
@@ -297,7 +340,7 @@ class Multiplexer():  #{{{
         self.a_stream = self._get_fileno(a_stream)
 
     def mux(self):
-        logger.debug("Muxing video {} and audio {}.".format(
+        self.logger.debug("Muxing video {} and audio {}.".format(
             self.v_stream, self.a_stream))
         args = [
             "ffmpeg", "-y",
@@ -312,11 +355,16 @@ class Multiplexer():  #{{{
             stderr=subprocess.DEVNULL,
             pass_fds=(self.v_stream, self.a_stream),
             )
-        os.close(self.v_stream)
-        os.close(self.a_stream)
         self.logger.debug(
             SUBPROCESS_LOG.format(
                 self.process.pid, args
+                )
+            )
+        os.close(self.v_stream)
+        os.close(self.a_stream)
+        self.logger.debug(
+            "Closed fd {} and {} after spawning subprocess.".format(
+                self.v_stream, self.a_stream
                 )
             )
         return self.process.stdout

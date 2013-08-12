@@ -19,6 +19,9 @@ from .. import *
 workdir = os.path.abspath(os.path.dirname(__file__))
 header = (b'YUV4MPEG2 W720 H480 F30000:1001 '
           b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n')
+initial_fds = sorted(os.listdir("/proc/self/fd"))
+    # Opened file descriptors will be checked against this list after
+    # each test to make sure files are not left open by the tested module.
 
 
 class UtilsTestCase(unittest.TestCase):
@@ -29,9 +32,8 @@ class UtilsTestCase(unittest.TestCase):
     def tearDown(self):
         logger = logging.getLogger(__name__+".tearDown")
         fds = os.listdir("/proc/self/fd")
-        std = ["0", "1", "2"]
-        if sorted(fds) != std:
-            for fd in std:
+        if sorted(fds) != initial_fds:
+            for fd in initial_fds:
                 try:
                     fds.remove(fd)
                 except ValueError:
@@ -199,7 +201,7 @@ class UtilsTestCase(unittest.TestCase):
         shot = Shot(54)
         shot.cut(6, 1)
         shot.demux(audio=False)
-        args = (["ffplay", "-autoexit"] + RAW_VIDEO + 
+        args = (["ffplay", "-autoexit"] + RAW_VIDEO +
                 ["-i", "pipe:{}".format(shot.v_stream.fileno())])
         p = subprocess.Popen(
             args,
@@ -211,6 +213,7 @@ class UtilsTestCase(unittest.TestCase):
         shot.v_stream.close()
         p.wait()
 
+    @unittest.skip("Work in progress")
     def test_cat(self):
         logger = logging.getLogger(__name__+".test_cat")
         logger.debug("Testing Cat.")
@@ -219,15 +222,10 @@ class UtilsTestCase(unittest.TestCase):
         cat.append(Shot(54).cut(5, 1))
         cat.append(Shot(54).cut(4, 1))
         cat.process()
-        logger.debug(
-            "cat.v_stream = {}\n"
-            "cat.a_stream = {}".format(
-                cat.v_stream,
-                cat.a_stream,
-                )
-            )
         muxer = Multiplexer(cat.v_stream, cat.a_stream)
         s = muxer.mux()
+        cat.v_stream.close()
+        cat.a_stream.close()
         logger.debug("muxer output = {}".format(s))
         with open("testfile", "wb") as f:
             shutil.copyfileobj(s, f)
@@ -236,6 +234,8 @@ class UtilsTestCase(unittest.TestCase):
         #player.process.wait()
 
     def test_cat_concatenate_streams(self):
+        logger = logging.getLogger(__name__+".test_cat_concatenate_streams")
+        logger.debug("Testing Cat._concatenate_streams.")
         q = queue.Queue()
         p1r, p1w = os.pipe()
         p2r, p2w = os.pipe()
@@ -245,8 +245,17 @@ class UtilsTestCase(unittest.TestCase):
         q.put(False)
         os.write(p1w, b'asdf\n')
         os.write(p2w, b'fdsa\n')
+        logger.debug(
+            "Created 3 pipes:\n"
+            "write {} -> read {}\n"
+            "write {} -> read {}\n"
+            "write {} -> read {} (concatenated stream).".format(
+                p1w, p1r, p2w, p2r, p3w, p3r
+                )
+            )
         os.close(p1w)
         os.close(p2w)
+        logger.debug("Wrote to and closed fds {} and {}.".format(p1w, p2w))
         t = threading.Thread(
             target=Cat._concatenate_streams,
             args=(q, open(p3w, "wb")),
