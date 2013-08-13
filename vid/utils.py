@@ -8,6 +8,7 @@ import os
 import io
 import sys
 import glob
+import stat
 import queue
 import pprint
 import shutil
@@ -21,8 +22,10 @@ import subprocess
 
 FASTSEEK_THRESHOLD = 30  # Seconds
 RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-an"]
-RAW_AUDIO = ["-f", "u16le", "-acodec", "pcm_s16le",
-    "-ac", "2", "-ar", "44100", "-vn"]
+RAW_AUDIO = [
+    "-f", "u16le", "-acodec", "pcm_s16le",
+    "-ac", "2", "-ar", "44100", "-vn",
+    ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
 OUTPUT_FORMAT = [
     "-f", "avi",
@@ -46,9 +49,25 @@ def cleanup():
 def _redirect_stderr_to_log_file():
     # This function is passed as the preexec_fn to subprocess.Popen
     pid = os.getpid()
-    file = open(logdir+"/{}.log".format(pid), "w")
+    file = open(logdir+"/p{}.log".format(pid), "w")
     os.dup2(file.fileno(), sys.stderr.fileno())
-    file.write("stderr stream from process id {}:\n\n".format(pid))
+    file.write("Log for subprocess id {}.\n\n".format(pid))
+    ls = "Open file descriptors:\n"
+    for fd in os.listdir("/proc/self/fd"):
+        pathname = "/proc/self/fd/" + str(fd)
+        try:
+            st = os.stat(pathname, follow_symlinks=False)
+            mode = stat.filemode(st.st_mode)
+            link = os.readlink(pathname)
+            ls += "    {} {:2} -> {}\n".format(
+                mode,
+                fd,
+                link,
+                )
+        except FileNotFoundError:
+            continue
+    file.write(ls)
+    file.write("\n-- start stderr stream -- \n\n")
 
 
 class Shot():         #{{{
@@ -106,6 +125,12 @@ class Shot():         #{{{
         streams to those files. The caller is responsible for closing
         the files.
 
+        Because of this bug
+        https://ffmpeg.org/trac/ffmpeg/ticket/2700
+        and by following the model in this script
+        http://ffmpeg.org/trac/ffmpeg/wiki/How%20to%20concatenate%20%28join%2C%20merge%29%20media%20files#Script
+        I call one subprocess per stream.
+
         """
         assert video or audio
         args = ["ffmpeg", "-y"]
@@ -126,7 +151,7 @@ class Shot():         #{{{
 
         # Define output arguments
         if video:
-            args += ["-filter:v", "yadif"]
+            v_args = args + ["-filter:v", "yadif"]
             if remove_header:
                 video1_r, video1_w = os.pipe()
                 video2_r, video2_w = os.pipe()
@@ -144,10 +169,10 @@ class Shot():         #{{{
                 write_fds.append(video1_w)
                 self.v_stream = open(video2_r, "rb")
                 if seek:
-                    args += ["-ss", str(seek)]
+                    v_args += ["-ss", str(seek)]
                 if self.dur:
-                    args += ["-t", str(self.dur)]
-                args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
+                    v_args += ["-t", str(self.dur)]
+                v_args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
                 t.start()
             else:
                 video_fdr, video_fdw = os.pipe()
@@ -160,35 +185,54 @@ class Shot():         #{{{
                 write_fds.append(video_fdw)
                 self.v_stream = open(video_fdr, "rb")
                 if seek:
-                    args += ["-ss", str(seek)]
+                    v_args += ["-ss", str(seek)]
                 if self.dur:
-                    args += ["-t", str(self.dur)]
-                args += RAW_VIDEO + ["pipe:{}".format(video_fdw)]
+                    v_args += ["-t", str(self.dur)]
+                v_args += RAW_VIDEO + ["pipe:{}".format(video_fdw)]
+
+            # Create subprocess
+            self.process = subprocess.Popen(
+                v_args,
+                pass_fds=write_fds,
+                stdout=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                preexec_fn=_redirect_stderr_to_log_file,
+                )
+            self.logger.debug(
+                SUBPROCESS_LOG.format(
+                    self.process.pid, v_args
+                    )
+                )
         if audio:
             audio_fdr, audio_fdw = os.pipe()
             write_fds.append(audio_fdw)
             self.a_stream = open(audio_fdr, "rb")
-            args += RAW_AUDIO + ["pipe:{}".format(audio_fdw)]
             self.logger.debug(
                 "Audio pipe created:\n"
                 "subprocess {} -> {} self.a_stream.".format(
                     audio_fdw, audio_fdr
                     )
                 )
+            a_args = args + RAW_AUDIO
+            if seek:
+                a_args += ["-ss", str(seek)]
+            if self.dur:
+                a_args += ["-t", str(self.dur)]
+            a_args += ["pipe:{}".format(audio_fdw)]
 
-        # Create subprocess
-        self.process = subprocess.Popen(
-            args,
-            pass_fds=write_fds,
-            stdout=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            preexec_fn=_redirect_stderr_to_log_file,
-            )
-        self.logger.debug(
-            SUBPROCESS_LOG.format(
-                self.process.pid, args
+            # Create subprocess
+            self.process = subprocess.Popen(
+                a_args,
+                pass_fds=write_fds,
+                stdout=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                preexec_fn=_redirect_stderr_to_log_file,
                 )
-            )
+            self.logger.debug(
+                SUBPROCESS_LOG.format(
+                    self.process.pid, a_args
+                    )
+                )
         for fd in write_fds:
             # Close write file descriptors.
             os.close(fd)
@@ -270,8 +314,8 @@ class Cat():          #{{{
                     shot, shot.v_stream, shot.a_stream
                     )
                 )
-        v_queue.put(False)
-        a_queue.put(False)
+        v_queue.put(None)
+        a_queue.put(None)
 
     @staticmethod
     def _concatenate_streams(queue, output):
@@ -279,14 +323,22 @@ class Cat():          #{{{
         #import pdb; pdb.set_trace()
         while True:
             i = queue.get()
-            if i:
+            if i is not None:
                 logger.debug("Concatenating {} to {}.".format(i, output))
-                shutil.copyfileobj(i, output)
-                #while True:
-                #    buf = i.read(16*1024)
-                #    if buf == b'':
-                #        break
-                #    output.write(buf)
+                #shutil.copyfileobj(i, output)
+                while True:
+                    buf = i.read(16*1024)
+                    logger.debug("{} {:9} -> {:9} {}".format(
+                            i.fileno(), len(buf), "", output.fileno()
+                            )
+                        )
+                    if buf == b'':
+                        break
+                    l = output.write(buf)
+                    logger.debug("{} {:9} -> {:9} {}".format(
+                            i.fileno(), "", l, output.fileno()
+                            )
+                        )
                 i.close()
                 logger.debug("Finished reading {} and closed it.".format(i))
             else:
@@ -308,19 +360,30 @@ class Player():       #{{{
         pass_fds = ()
         # Find out what is file.
         if isinstance(file, str):
+            self.logger.debug("File is string \"{}\".".format(file))
             args.append(file)
-        if isinstance(file, int):
-            args.append("pipe:{}".format(file))
+            file = subprocess.DEVNULL
+        elif isinstance(file, int):
+            self.logger.debug("File is int {}.".format(file))
+            args.append("pipe:")
             pass_fds = (file,)
-        if isinstance(file.fileno(), int):
-            args.append("pipe:{}".format(file.fileno()))
+        elif isinstance(file.fileno(), int):
+            self.logger.debug("File is file object {}.".format(file))
+            args.append("pipe:")
             pass_fds = (file.fileno(),)
+        else:
+            raise ValueError(
+                "Argument must be string, int or file object, got {}.".format(
+                    type(file)
+                    )
+                )
+        self.logger.debug("Passing file descriptors : {}".format(pass_fds))
         self.process = subprocess.Popen(
             args,
-            stdin=subprocess.DEVNULL,
+            stdin=file,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            pass_fds=pass_fds,
+            #pass_fds=pass_fds,
             preexec_fn=_redirect_stderr_to_log_file,
             )
         self.logger.debug(
@@ -342,10 +405,14 @@ class Multiplexer():  #{{{
     def mux(self):
         self.logger.debug("Muxing video {} and audio {}.".format(
             self.v_stream, self.a_stream))
+        rv = RAW_VIDEO[:]
+        rv.remove("-an")
+        ra = RAW_AUDIO[:]
+        ra.remove("-vn")
         args = [
             "ffmpeg", "-y",
-            ] + RAW_VIDEO[:-1] + ["-i", "pipe:{}".format(self.v_stream),
-            ] + RAW_AUDIO[:-1] + ["-i", "pipe:{}".format(self.a_stream),
+            ] + rv + ["-i", "pipe:{}".format(self.v_stream),
+            ] + ra + ["-i", "pipe:{}".format(self.a_stream),
             ] + OUTPUT_FORMAT + ["pipe:1",
             ]
         self.process = subprocess.Popen(
@@ -354,6 +421,7 @@ class Multiplexer():  #{{{
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             pass_fds=(self.v_stream, self.a_stream),
+            preexec_fn=_redirect_stderr_to_log_file,
             )
         self.logger.debug(
             SUBPROCESS_LOG.format(
@@ -367,6 +435,7 @@ class Multiplexer():  #{{{
                 self.v_stream, self.a_stream
                 )
             )
+        self.output = self.process.stdout
         return self.process.stdout
 
     @staticmethod

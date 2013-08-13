@@ -16,6 +16,9 @@ import subprocess
 from .. import *
 
 
+LOG_TEST_END = "---- Test ended " + ("-" * 54)
+
+
 workdir = os.path.abspath(os.path.dirname(__file__))
 header = (b'YUV4MPEG2 W720 H480 F30000:1001 '
           b'It A32:27 C420mpeg2 XYSCSS=420MPEG2\n')
@@ -39,6 +42,13 @@ class UtilsTestCase(unittest.TestCase):
                 except ValueError:
                     pass
             logger.warning("File descriptors left opened: {}.".format(fds))
+            for fd in fds:
+                try:
+                    os.close(fd)
+                except OSError:
+                    # Maybe it was in the process of being closed.
+                    continue
+        logger.debug(LOG_TEST_END)
 
     def test_shot_init(self):
         logger = logging.getLogger(__name__+".test_shot_init")
@@ -70,10 +80,9 @@ class UtilsTestCase(unittest.TestCase):
             )
         with self.assertRaises(FileNotFoundError):
             pathname = Shot(56).name
-        return
 
     def test_player(self):
-        logger = logging.getLogger(__name__+".test_play")
+        logger = logging.getLogger(__name__+".test_player")
         logger.debug("Testing Player")
         shot = Shot(54)
         shot.cut(7, 1)
@@ -83,6 +92,25 @@ class UtilsTestCase(unittest.TestCase):
             player.process.wait(),
             0
             )
+
+        # Try with a pipe.
+        p = subprocess.Popen(
+            [
+                "ffmpeg", "-y", "-i", "A roll/testsequence/M2U00054.mpg",
+                "-f", "avi", "-t", "1", "pipe:"
+            ],
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            )
+        logger.debug("Reading ffmpeg output from pipe {}".format(p.stdout))
+        player = Player(p.stdout)
+        self.assertEqual(
+            player.process.wait(),
+            0
+            )
+        p.wait()
+
 
     def test_shot_repr(self):
         logger = logging.getLogger(__name__+".test_shot_repr")
@@ -213,10 +241,23 @@ class UtilsTestCase(unittest.TestCase):
         shot.v_stream.close()
         p.wait()
 
-    @unittest.skip("Work in progress")
     def test_cat(self):
         logger = logging.getLogger(__name__+".test_cat")
-        logger.debug("Testing Cat.")
+        logger.debug("Testing Cat with 1 shot.")
+        cat = Cat()
+        cat.append(Shot(54).cut(4, 1))
+        cat.process()
+        muxer = Multiplexer(cat.v_stream, cat.a_stream)
+        s = muxer.mux()
+        logger.debug("muxer output = {}".format(s))
+        #with open("testfile", "wb") as f:
+        #    shutil.copyfileobj(s, f)
+        player = Player(s)
+        player.process.wait()
+
+        return
+        #TODO make this work.
+        logger.debug("Testing Cat with 3 shots.")
         cat = Cat()
         cat.append(Shot(54).cut(6, 1))
         cat.append(Shot(54).cut(5, 1))
@@ -224,14 +265,11 @@ class UtilsTestCase(unittest.TestCase):
         cat.process()
         muxer = Multiplexer(cat.v_stream, cat.a_stream)
         s = muxer.mux()
-        cat.v_stream.close()
-        cat.a_stream.close()
         logger.debug("muxer output = {}".format(s))
-        with open("testfile", "wb") as f:
-            shutil.copyfileobj(s, f)
-        #player = Player(s)
-        #s.close()
-        #player.process.wait()
+        #with open("testfile", "wb") as f:
+        #    shutil.copyfileobj(s, f)
+        player = Player(s)
+        player.process.wait()
 
     def test_cat_concatenate_streams(self):
         logger = logging.getLogger(__name__+".test_cat_concatenate_streams")
@@ -240,11 +278,6 @@ class UtilsTestCase(unittest.TestCase):
         p1r, p1w = os.pipe()
         p2r, p2w = os.pipe()
         p3r, p3w = os.pipe()
-        q.put(open(p1r, "rb"))
-        q.put(open(p2r, "rb"))
-        q.put(False)
-        os.write(p1w, b'asdf\n')
-        os.write(p2w, b'fdsa\n')
         logger.debug(
             "Created 3 pipes:\n"
             "write {} -> read {}\n"
@@ -253,6 +286,11 @@ class UtilsTestCase(unittest.TestCase):
                 p1w, p1r, p2w, p2r, p3w, p3r
                 )
             )
+        q.put(open(p1r, "rb"))
+        q.put(open(p2r, "rb"))
+        q.put(None)
+        os.write(p1w, b'asdf\n')
+        os.write(p2w, b'fdsa\n')
         os.close(p1w)
         os.close(p2w)
         logger.debug("Wrote to and closed fds {} and {}.".format(p1w, p2w))
@@ -267,3 +305,14 @@ class UtilsTestCase(unittest.TestCase):
             )
         t.join()
         os.close(p3r)
+
+    @unittest.skip("because")
+    def test_multiplexer(self):
+        logger = logging.getLogger(__name__+".test_multiplexer")
+        logger.debug("Testing Multiplexer")
+        shot = Shot(54).cut(0, 1)
+        shot.demux()
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        muxed = muxer.mux()
+        with open("testfile", "wb") as f:
+            shutil.copyfileobj(muxed, f)

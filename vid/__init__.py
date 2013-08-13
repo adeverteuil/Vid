@@ -89,7 +89,7 @@ handlers = {
         'class': "logging.FileHandler",
         'level': "DEBUG",
         'formatter': "ff",
-        'filename': "log/vid.log",
+        'filename': "log/main{}.log".format(os.getpid()),
         },
     }
 root = {
@@ -103,6 +103,9 @@ d = {
     'root': root,
     }
 logging.config.dictConfig(d)
+
+
+logging.debug("My pid is {}.".format(os.getpid()))
 
 
 #logger = logging.getLogger(__name__)
