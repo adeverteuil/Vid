@@ -10,6 +10,7 @@ import shutil
 import os.path
 import logging
 import unittest
+import unittest.mock
 import threading
 import subprocess
 
@@ -44,7 +45,7 @@ class UtilsTestCase(unittest.TestCase):
             logger.warning("File descriptors left opened: {}.".format(fds))
             for fd in fds:
                 try:
-                    os.close(fd)
+                    os.close(int(fd))
                 except OSError:
                     # Maybe it was in the process of being closed.
                     continue
@@ -255,12 +256,57 @@ class UtilsTestCase(unittest.TestCase):
         player = Player(s)
         player.process.wait()
 
-        return
-        #TODO make this work.
+        logger.debug("Testing Cat with bogus streams.")
+        cat = Cat()
+        pipes = os.pipe(), os.pipe(), os.pipe()
+        pipes += os.pipe(), os.pipe(), os.pipe()
+        logger.debug(
+            "Created 6 pipes:\n" +
+            "\n".join(
+                ["write {1} -> read {0}".format(*pipe) for pipe in pipes]
+                ) +
+            "\n"
+            )
+        os.write(pipes[0][1], b"header\nFRAME\nvideo 1FRAME\nvideo 1")
+        os.write(pipes[1][1], b"audio 1, ")
+        os.write(pipes[2][1], b"FRAME\nvideo 2FRAME\nvideo 2")
+        os.write(pipes[3][1], b"audio 2, ")
+        os.write(pipes[4][1], b"FRAME\nvideo 3FRAME\nvideo 3")
+        os.write(pipes[5][1], b"audio 3")
+        shots = [unittest.mock.Mock() for x in range(3)]
+        shots[0].v_stream = open(pipes[0][0], "rb")
+        shots[0].a_stream = open(pipes[1][0], "rb")
+        shots[1].v_stream = open(pipes[2][0], "rb")
+        shots[1].a_stream = open(pipes[3][0], "rb")
+        shots[2].v_stream = open(pipes[4][0], "rb")
+        shots[2].a_stream = open(pipes[5][0], "rb")
+        cat.append(shots[0])
+        cat.append(shots[1])
+        cat.append(shots[2])
+        cat.process()
+        for pipe in pipes:
+            os.close(pipe[1])
+        self.assertEqual(
+            cat.v_stream.read(),
+            b"header\nFRAME\nvideo 1FRAME\nvideo 1"
+            b"FRAME\nvideo 2FRAME\nvideo 2"
+            b"FRAME\nvideo 3FRAME\nvideo 3"
+            )
+        self.assertEqual(
+            cat.a_stream.read(),
+            b"audio 1, audio 2, audio 3"
+            )
+        self.assertEqual(cat.v_stream.read(), b"")
+        self.assertEqual(cat.a_stream.read(), b"")
+        cat.v_stream.close()
+        cat.a_stream.close()
+
+    def test_cat_3_shots(self):
+        logger = logging.getLogger(__name__+".test_cat_3_shots")
         logger.debug("Testing Cat with 3 shots.")
         cat = Cat()
         cat.append(Shot(54).cut(6, 1))
-        cat.append(Shot(54).cut(5, 1))
+        #cat.append(Shot(54).cut(5, 1))
         cat.append(Shot(54).cut(4, 1))
         cat.process()
         muxer = Multiplexer(cat.v_stream, cat.a_stream)
@@ -269,7 +315,7 @@ class UtilsTestCase(unittest.TestCase):
         #with open("testfile", "wb") as f:
         #    shutil.copyfileobj(s, f)
         player = Player(s)
-        player.process.wait()
+        self.assertEqual(player.process.wait(), 0)
 
     def test_cat_concatenate_streams(self):
         logger = logging.getLogger(__name__+".test_cat_concatenate_streams")
@@ -306,13 +352,12 @@ class UtilsTestCase(unittest.TestCase):
         t.join()
         os.close(p3r)
 
-    @unittest.skip("because")
     def test_multiplexer(self):
         logger = logging.getLogger(__name__+".test_multiplexer")
         logger.debug("Testing Multiplexer")
         shot = Shot(54).cut(0, 1)
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
-        muxed = muxer.mux()
-        with open("testfile", "wb") as f:
-            shutil.copyfileobj(muxed, f)
+        #muxed = muxer.mux()
+        player = Player(muxer.mux())
+        self.assertEqual(player.process.wait(), 0)

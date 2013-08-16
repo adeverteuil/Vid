@@ -328,17 +328,17 @@ class Cat():          #{{{
                 #shutil.copyfileobj(i, output)
                 while True:
                     buf = i.read(16*1024)
-                    logger.debug("{} {:9} -> {:9} {}".format(
-                            i.fileno(), len(buf), "", output.fileno()
-                            )
-                        )
+                    #logger.debug("{} {:9} -> {:9} {}".format(
+                    #        i.fileno(), len(buf), "", output.fileno()
+                    #        )
+                    #    )
                     if buf == b'':
                         break
                     l = output.write(buf)
-                    logger.debug("{} {:9} -> {:9} {}".format(
-                            i.fileno(), "", l, output.fileno()
-                            )
-                        )
+                    #logger.debug("{} {:9} -> {:9} {}".format(
+                    #        i.fileno(), "", l, output.fileno()
+                    #        )
+                    #    )
                 i.close()
                 logger.debug("Finished reading {} and closed it.".format(i))
             else:
@@ -357,7 +357,6 @@ class Player():       #{{{
     def __init__(self, file):
         self.logger = logging.getLogger(__name__+".Player")
         args = ["ffplay", "-autoexit"]
-        pass_fds = ()
         # Find out what is file.
         if isinstance(file, str):
             self.logger.debug("File is string \"{}\".".format(file))
@@ -366,18 +365,17 @@ class Player():       #{{{
         elif isinstance(file, int):
             self.logger.debug("File is int {}.".format(file))
             args.append("pipe:")
-            pass_fds = (file,)
         elif isinstance(file.fileno(), int):
             self.logger.debug("File is file object {}.".format(file))
             args.append("pipe:")
-            pass_fds = (file.fileno(),)
+            file = file.fileno()
         else:
             raise ValueError(
                 "Argument must be string, int or file object, got {}.".format(
                     type(file)
                     )
                 )
-        self.logger.debug("Passing file descriptors : {}".format(pass_fds))
+        #self.logger.debug("Passing file descriptors : {}".format(pass_fds))
         self.process = subprocess.Popen(
             args,
             stdin=file,
@@ -391,9 +389,9 @@ class Player():       #{{{
                 self.process.pid, args
                 )
             )
-        for fd in pass_fds:
-            os.close(fd)
-            self.logger.debug("Closed fd {}.".format(fd))
+        if isinstance(file, int):
+            os.close(file)
+            self.logger.debug("Closed fd {}.".format(file))
 
 #}}}
 class Multiplexer():  #{{{
