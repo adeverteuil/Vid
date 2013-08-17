@@ -22,7 +22,7 @@ __all__ = [
     "Shot",
     "Player",
     #"Cat",
-    #"Multiplexer",
+    "Multiplexer",
     #"Stream",
     #"VideoStream",
     #"AudioStream",

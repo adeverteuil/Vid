@@ -288,7 +288,7 @@ class UtilsTestCase(unittest.TestCase):
         shot.demux(audio=False)
         b = shot.v_stream.read(1024)
         shot.v_stream.close()
-        shot.process.wait()
+        shot.v_process.wait()
         del b
 
         # Play it.
@@ -337,3 +337,16 @@ class UtilsTestCase(unittest.TestCase):
             0
             )
         p.wait()
+
+    def test_multiplexer(self):
+        logger = logging.getLogger(__name__+".test_multiplexer")
+        logger.debug("Testing Multiplexer")
+        shot = Shot(54).cut(0, 1)
+        shot.demux()
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        #with open(os.devnull, "wb") as dn, muxer.mux() as m:
+        #    shutil.copyfileobj(m, dn)
+        #return
+        #muxed = muxer.mux()
+        player = Player(muxer.mux())
+        self.assertEqual(player.process.wait(), 0)
