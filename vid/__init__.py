@@ -20,7 +20,7 @@ __all__ = [
     "RemoveHeader",
     "ConcatenateStreams",
     "Shot",
-    #"Player",
+    "Player",
     #"Cat",
     #"Multiplexer",
     #"Stream",

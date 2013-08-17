@@ -307,3 +307,33 @@ class UtilsTestCase(unittest.TestCase):
             )
         shot.v_stream.close()
         p.wait()
+
+    def test_player(self):
+        logger = logging.getLogger(__name__+".test_player")
+        logger.debug("Testing Player")
+        shot = Shot(54)
+        shot.cut(7, 1)
+        shot.demux(audio=False)
+        player = Player(shot.v_stream)
+        self.assertEqual(
+            player.process.wait(),
+            0
+            )
+
+        # Try with a pipe.
+        p = subprocess.Popen(
+            [
+                "ffmpeg", "-y", "-i", "A roll/testsequence/M2U00054.mpg",
+                "-f", "avi", "-t", "1", "pipe:"
+            ],
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            )
+        logger.debug("Reading ffmpeg output from pipe {}".format(p.stdout))
+        player = Player(p.stdout)
+        self.assertEqual(
+            player.process.wait(),
+            0
+            )
+        p.wait()

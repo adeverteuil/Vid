@@ -404,3 +404,48 @@ class Shot():                                    #{{{1
         return self
         # This allows instantiation and cutting at once :
         # Shot(<number>).cut(seek, dur)
+
+class Player():                                  #{{{1
+    """A wrapper for ffplay.
+
+    Constructor argument may be a path name string, a file descriptor integer
+    or a file object which has a fileno() method.
+    """
+    def __init__(self, file):
+        self.logger = logging.getLogger(__name__+".Player")
+        args = ["ffplay", "-autoexit"]
+        # Find out what is file.
+        if isinstance(file, str):
+            self.logger.debug("File is string \"{}\".".format(file))
+            args.append(file)
+            file = subprocess.DEVNULL
+        elif isinstance(file, int):
+            self.logger.debug("File is int {}.".format(file))
+            args.append("pipe:")
+        elif isinstance(file.fileno(), int):
+            self.logger.debug("File is file object {}.".format(file))
+            args.append("pipe:")
+        else:
+            raise ValueError(
+                "Argument must be string, int or file object, got {}.".format(
+                    type(file)
+                    )
+                )
+        self.process = subprocess.Popen(
+            args,
+            stdin=file,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=_redirect_stderr_to_log_file,
+            )
+        self.logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, args
+                )
+            )
+        if isinstance(file, int):
+            os.close(file)
+            self.logger.debug("Closed fd {}.".format(file))
+        elif isinstance(file, io.IOBase):
+            file.close()
+            self.logger.debug("Closed file object {}.".format(file))
