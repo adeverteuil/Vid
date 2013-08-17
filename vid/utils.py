@@ -106,7 +106,7 @@ class RemoveHeader(threading.Thread):
 
     def run(self):
         self.logger.debug(
-            "Thread starting : "
+            "Thread starting: "
             "removing header from {}, piping the rest through {}.".format(
                 self.input, self.output
                 )
@@ -188,3 +188,55 @@ class RemoveHeader(threading.Thread):
 
     def get_bytes_written(self):
         return self.bytes_written
+
+
+class ConcatenateStreams(threading.Thread):
+    """Threading class to concatenate many inputs in one output.
+
+    Passed parameters must be one Queue of file objects to read and one
+    file object to write to. All files are closed when done with.
+    """
+
+    def __init__(self, q, output):
+        self.logger = logging.getLogger(__name__+".ConcatenateStreams")
+
+        assert isinstance(q, queue.Queue)
+        assert isinstance(output, io.IOBase)
+        assert output.writable()
+
+        self.queue = q
+        self.output = output
+        self.exception = None
+        self.finished = threading.Event()
+
+        super(ConcatenateStreams, self).__init__()
+
+    def run(self):
+        self.logger.debug(
+            "Thread starting: Concatenating inputs to {}.".format(self.output)
+            )
+        try:
+            while True:
+                fileobj = self.queue.get()
+                if fileobj is None:
+                    self.queue.task_done()
+                    raise queue.Empty
+                assert isinstance(fileobj, io.IOBase)
+                assert fileobj.readable()
+                self.logger.debug(
+                    "Concatenating {} to {}.".format(fileobj, self.output)
+                    )
+                shutil.copyfileobj(fileobj, self.output)
+                fileobj.close()
+                self.logger.debug("{} closed.".format(fileobj))
+                self.queue.task_done()
+        except queue.Empty:
+            self.finished.set()
+        except Exception as err:
+            self.exception = err
+        finally:
+            if not self.output.closed:
+                self.output.close()
+            self.logger.debug(
+                "Concatenation achieved. {} closed.".format(self.output)
+                )

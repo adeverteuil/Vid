@@ -18,6 +18,7 @@ __all__ = [
     "RAW_AUDIO",
     "RAW_VIDEO",
     "RemoveHeader",
+    "ConcatenateStreams",
     #"Shot",
     #"Player",
     #"Cat",
