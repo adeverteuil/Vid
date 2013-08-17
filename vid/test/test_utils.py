@@ -207,3 +207,103 @@ class UtilsTestCase(unittest.TestCase):
         cat2.join()
         self.assertTrue(cat2.finished.is_set())
         out2_r.close()
+
+    def test_shot(self):
+        logger = logging.getLogger(__name__+".test_shot")
+        logger.debug("Testing Shot.")
+        self.assertRaises(FileNotFoundError, Shot, 1)
+        self.assertRaises(FileNotFoundError, Shot, "1")
+        self.assertRaises(ValueError, Shot, "a")
+        self.assertEqual(Shot(54).name, "A roll/testsequence/M2U00054.mpg")
+        self.assertRaises(FileNotFoundError, Shot, 56)
+
+        shot = Shot(54)
+        self.assertEqual(repr(shot), "<Shot(54), seek=0, dur=None>")
+
+        shot.cut(dur=5)
+        self.assertEqual(shot.seek, 0)
+        self.assertEqual(shot.dur, 5)
+
+        shot.cut(seek=5)
+        self.assertEqual(shot.seek, 5)
+        self.assertEqual(shot.dur, None)
+
+        shot.cut(5, 6)
+        self.assertEqual(shot.seek, 5)
+        self.assertEqual(shot.dur, 6)
+
+        shot.cut()
+        self.assertEqual(shot.seek, 0)
+        self.assertEqual(shot.dur, None)
+
+        shot.cut(45)
+        self.assertEqual(shot.seek, 45)
+        self.assertEqual(shot.dur, None)
+
+        self.assertRaises(
+            AssertionError,
+            shot.cut,
+            "1",
+            )
+
+        logger.debug("Testing Shot.demux().")
+        # With header.
+        logger.debug("Testing with header.")
+        shot = Shot(54)
+        shot.cut(5, 1)
+        shot.demux(audio=False)
+        self.assertEqual(
+            shot.v_stream.readline()[0:9],
+            b'YUV4MPEG2',
+            )
+        self.assertEqual(
+            shot.v_stream.readline(),
+            b'FRAME\n',
+            )
+        with open(os.devnull, "wb") as dn:
+            # Pipe the rest of the file in os.devnull to be sure there
+            # is no blocking.
+            shutil.copyfileobj(shot.v_stream, dn)
+        shot.v_stream.close()
+
+        # Without header.
+        logger.debug("Testing without header.")
+        shot = Shot(54)
+        shot.cut(5, 1)
+        shot.demux(audio=False, remove_header=True)
+        self.assertEqual(
+            shot.v_stream.readline(),
+            b'FRAME\n',
+            )
+        with open(os.devnull, "wb") as dn:
+            # Pipe the rest of the file in os.devnull to be sure there
+            # is no blocking.
+            shutil.copyfileobj(shot.v_stream, dn)
+        shot.v_stream.close()
+
+        # Close buffer before EOF.
+        logger.debug("Test with closing buffer before EOF.")
+        shot = Shot(54)
+        shot.cut(5, 1)
+        shot.demux(audio=False)
+        b = shot.v_stream.read(1024)
+        shot.v_stream.close()
+        shot.process.wait()
+        del b
+
+        # Play it.
+        logger.debug("Test playing the file")
+        shot = Shot(54)
+        shot.cut(6, 1)
+        shot.demux(audio=False)
+        args = (["ffplay", "-autoexit"] + RAW_VIDEO +
+                ["-i", "pipe:{}".format(shot.v_stream.fileno())])
+        p = subprocess.Popen(
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            pass_fds=(shot.v_stream.fileno(),), # shot.a_stream.fileno()),
+            )
+        shot.v_stream.close()
+        p.wait()

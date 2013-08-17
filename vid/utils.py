@@ -47,7 +47,7 @@ def cleanup():
     logging.shutdown()
 
 
-def _redirect_stderr_to_log_file():
+def _redirect_stderr_to_log_file():              #{{{1
     # This function is passed as the preexec_fn to subprocess.Popen
     pid = os.getpid()
     file = open(logdir+"/p{}.log".format(pid), "w")
@@ -71,7 +71,7 @@ def _redirect_stderr_to_log_file():
     file.write("\n-- start stderr stream -- \n\n")
 
 
-class RemoveHeader(threading.Thread):
+class RemoveHeader(threading.Thread):            #{{{1
     """Threading class to remove one line from input and pipe to output.
 
     Passed parameters must be one readable file object and one writable
@@ -190,7 +190,7 @@ class RemoveHeader(threading.Thread):
         return self.bytes_written
 
 
-class ConcatenateStreams(threading.Thread):
+class ConcatenateStreams(threading.Thread):      #{{{1
     """Threading class to concatenate many inputs in one output.
 
     Passed parameters must be one Queue of file objects to read and one
@@ -240,3 +240,167 @@ class ConcatenateStreams(threading.Thread):
             self.logger.debug(
                 "Concatenation achieved. {} closed.".format(self.output)
                 )
+
+
+class Shot():                                    #{{{1
+    """Abstraction for a movie file copied from the camcorder.
+
+    The constructor takes an integer as a parameter and finds the
+    appropriate file.
+
+    The demux() method returns readable file objects for the requested streams.
+
+    This is the simplest building block for a movie.
+    """
+    def __init__(self, number):
+        self.logger = logging.getLogger(__name__+".Shot")
+        self.number = int(number)
+        self.seek = 0
+        self.dur = None
+        self.process = None
+        self.v_stream = None
+        self.a_stream = None
+        pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
+            folder="A roll",
+            prefix="M2U",
+            number=self.number,
+            numfmt="05d",
+            ext="mpg",
+            )
+        try:
+            self.name = glob.glob(pattern)[0]
+        except IndexError as err:
+            self.name = None
+            raise FileNotFoundError(
+                "Didn't find footage number {}.\n"
+                "Pattern is \"{}\".".format(self.number, pattern)
+                ) from err
+        except :
+            self.logger.exception("That's a new exception?!")
+
+    def __repr__(self):
+        return "<Shot({}), seek={}, dur={}>".format(
+            self.number,
+            self.seek,
+            self.dur,
+            )
+
+    def _probe(self):
+        #TODO use ffprobe to gather information about the file.
+        pass
+
+    def demux(self, video=True, audio=True, remove_header=False):
+        """Return readable video and audio streams.
+
+        This method will demultiplex the shot and pipe the raw video and audio
+        streams to those files. The caller is responsible for closing
+        the files.
+
+        The return value is (audio,), (video,) or (video, audio)
+        This method also sets it's instance's a_stream and v_stream properties.
+        """
+        assert video or audio
+        args = ["ffmpeg", "-y"]
+        pass_fds = []
+        returnvalue = []
+        self.logger.debug("Demuxing {}.".format(self))
+
+        # Define input arguments.
+        if (FASTSEEK_THRESHOLD is not None and
+            FASTSEEK_THRESHOLD > 10 and
+            self.seek > FASTSEEK_THRESHOLD
+            ):
+            fastseek = self.seek - (FASTSEEK_THRESHOLD - 10)
+            seek = FASTSEEK_THRESHOLD - 10
+            args += ["-ss", str(fastseek)]
+        else:
+            seek = self.seek  # This will actually be used for output.
+        args += ["-i", self.name]
+
+        # Define video arguments.
+        if video:
+            args += ["-filter:v", "yadif"]  # Always deinterlace.
+            if remove_header:
+                video1_r, video1_w = os.pipe()
+                video2_r, video2_w = os.pipe()
+                self.logger.debug(
+                    "Video pipes created:\n"
+                    "subprocess {} -> {} RemoveHeader;\n"
+                    "RemoveHeader {} -> {} self.v_stream.".format(
+                        video1_w, video1_r, video2_w, video2_r
+                        )
+                    )
+                t = RemoveHeader(open(video1_r, "rb"), open(video2_w, "wb"))
+                pass_fds.append(video1_w)
+                self.v_stream = open(video2_r, "rb")
+                if seek:
+                    args += ["-ss", str(seek)]
+                if self.dur:
+                    args += ["-t", str(self.dur)]
+                args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
+                t.start()
+            else:
+                video_r, video_w = os.pipe()
+                self.logger.debug(
+                    "Video pipe created:\n"
+                    "subprocess {} -> {} self.v_stream.".format(
+                        video_w, video_r
+                        )
+                    )
+                pass_fds.append(video_w)
+                self.v_stream = open(video_r, "rb")
+                if seek:
+                    args += ["-ss", str(seek)]
+                if self.dur:
+                    args += ["-t", str(self.dur)]
+                args += RAW_VIDEO + ["pipe:{}".format(video_w)]
+            returnvalue.append(self.v_stream)
+
+        # Define audio arguments
+        if audio:
+            audio_r, audio_w = os.pipe()
+            pass_fds.append(audio_w)
+            self.a_stream = open(audio_r, "rb")
+            returnvalue.append(self.a_stream)
+            self.logger.debug(
+                "Audio pipe created:\n"
+                "subprocess {} -> {} self.a_stream.".format(
+                    audio_fdw, audio_fdr
+                    )
+                )
+            args += RAW_AUDIO
+            if seek:
+                args += ["-ss", str(seek)]
+            if self.dur:
+                args += ["-t", str(self.dur)]
+            args += ["pipe:{}".format(audio_w)]
+
+        # Create subprocess.
+        self.process = subprocess.Popen(
+            args,
+            pass_fds=pass_fds,
+            stdout=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            preexec_fn=_redirect_stderr_to_log_file,
+            )
+        self.logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, args
+                )
+            )
+        for fd in pass_fds:
+            os.close(fd)
+            self.logger.debug("Closed fd {}.".format(fd))
+        self.logger.debug("Streams returned: {}.".format(returnvalue))
+        return tuple(returnvalue)
+
+    def cut(self, seek=0, dur=None):
+        """Sets the starting position and duration of the required frames."""
+        assert isinstance(seek, (int, float))
+        if dur is not None:
+            assert isinstance(seek, (int, float))
+        self.seek = seek
+        self.dur = dur
+        return self
+        # This allows instantiation and cutting at once :
+        # Shot(<number>).cut(seek, dur)
