@@ -9,6 +9,7 @@ import io
 import sys
 import glob
 import stat
+import errno
 import queue
 import pprint
 import shutil
@@ -70,380 +71,120 @@ def _redirect_stderr_to_log_file():
     file.write("\n-- start stderr stream -- \n\n")
 
 
-class Shot():         #{{{
-    """Abstraction for a movie file copied from the camcorder."""
-    def __init__(self, number):
-        self.logger = logging.getLogger(__name__+".Shot")
-        self.number = int(number)
-        self.seek = 0
-        self.dur = None
-        self.process = None
-        self.v_stream = None
-        self.a_stream = None
-        pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
-            folder="A roll",
-            prefix="M2U",
-            number=self.number,
-            numfmt="05d",
-            ext="mpg",
-            )
-        try:
-            self.name = glob.glob(pattern)[0]
-        except IndexError as err:
-            self.name = None
-            raise FileNotFoundError(
-                "Didn't find footage number {}.\n"
-                "Pattern is \"{}\".".format(self.number, pattern)
-                ) from err
-        except :
-            self.logger.exception("That's a new exception?!")
+class RemoveHeader(threading.Thread):
+    """Threading class to remove one line from input and pipe to output.
 
-    def __repr__(self):
-        return "<Shot({}), seek={}, dur={}>".format(
-            self.number,
-            self.seek,
-            self.dur,
-            )
+    Passed parameters must be one readable file object and one writable
+    file object. One line is read and dumped from the input. The rest is
+    copied to output. Both files are closed upon completion of the task.
 
-    def cut(self, seek=0, dur=None):
-        """Sets the starting position and duration of the required frames."""
-        assert isinstance(seek, (int, float))
-        if dur is not None:
-            assert isinstance(seek, (int, float))
-        self.seek = seek
-        self.dur = dur
-        return self
-        # This allows the method call Cat().append(Shot(#).cut(seek, dur))
+    The parties parameter is passed to the threading.Barrier
+    constructor to impose a barrier just before writing and just before
+    reading. Added for debugging and developement.
+    """
 
-    def _probe(self):
-        pass
+    def __init__(self, input, output, parties=1):
+        self.logger = logging.getLogger(__name__+".RemoveHeader")
 
-    def demux(self, video=True, audio=True, remove_header=False):
-        """Write video and audio as specified. Sets v_stream and a_stream.
+        assert isinstance(input, io.IOBase)
+        assert input.readable()
+        assert isinstance(output, io.IOBase)
+        assert output.writable()
 
-        This method will demultiplex the shot and pipe the raw video and audio
-        streams to those files. The caller is responsible for closing
-        the files.
+        self.input = input
+        self.output = output
+        self.bytes_read = 0     # Number of bytes read.
+        self.bytes_written = 0  # Number of bytes written.
+        self.exception = None
 
-        Because of this bug
-        https://ffmpeg.org/trac/ffmpeg/ticket/2700
-        and by following the model in this script
-        http://ffmpeg.org/trac/ffmpeg/wiki/How%20to%20concatenate%20%28join%2C%20merge%29%20media%20files#Script
-        I call one subprocess per stream.
+        # This was added for debugging.
+        self.read_barrier = threading.Barrier(parties)
+        self.write_barrier = threading.Barrier(parties)
+        self.finished = threading.Event()
 
-        """
-        assert video or audio
-        args = ["ffmpeg", "-y"]
-        write_fds = []
-        logger.info("demuxing {}".format(self))
+        super(RemoveHeader, self).__init__()
 
-        # Define input arguments
-        if (FASTSEEK_THRESHOLD is not None and
-            FASTSEEK_THRESHOLD > 10 and
-            self.seek > FASTSEEK_THRESHOLD
-            ):
-            fastseek = self.seek - (FASTSEEK_THRESHOLD - 10)
-            seek = FASTSEEK_THRESHOLD - 10
-            args += ["-ss", str(fastseek)]
-        else:
-            seek = self.seek  # This will actually be used for output.
-        args += ["-i", self.name]
-
-        # Define output arguments
-        if video:
-            v_args = args + ["-filter:v", "yadif"]
-            if remove_header:
-                video1_r, video1_w = os.pipe()
-                video2_r, video2_w = os.pipe()
-                self.logger.debug(
-                    "Video pipes created:\n"
-                    "subprocess {} -> {} _remove_headers;\n"
-                    "_remove_headers {} -> {} self.v_stream.".format(
-                        video1_w, video1_r, video2_w, video2_r
-                        )
-                    )
-                t = threading.Thread(
-                    target=self._remove_header,
-                    args=(video1_r, video2_w),
-                    )
-                write_fds.append(video1_w)
-                self.v_stream = open(video2_r, "rb")
-                if seek:
-                    v_args += ["-ss", str(seek)]
-                if self.dur:
-                    v_args += ["-t", str(self.dur)]
-                v_args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
-                t.start()
-            else:
-                video_fdr, video_fdw = os.pipe()
-                self.logger.debug(
-                    "Video pipe created:\n"
-                    "subprocess {} -> {} self.v_stream.".format(
-                        video_fdw, video_fdr
-                        )
-                    )
-                write_fds.append(video_fdw)
-                self.v_stream = open(video_fdr, "rb")
-                if seek:
-                    v_args += ["-ss", str(seek)]
-                if self.dur:
-                    v_args += ["-t", str(self.dur)]
-                v_args += RAW_VIDEO + ["pipe:{}".format(video_fdw)]
-
-            # Create subprocess
-            self.process = subprocess.Popen(
-                v_args,
-                pass_fds=write_fds,
-                stdout=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                preexec_fn=_redirect_stderr_to_log_file,
-                )
-            self.logger.debug(
-                SUBPROCESS_LOG.format(
-                    self.process.pid, v_args
-                    )
-                )
-        if audio:
-            audio_fdr, audio_fdw = os.pipe()
-            write_fds.append(audio_fdw)
-            self.a_stream = open(audio_fdr, "rb")
-            self.logger.debug(
-                "Audio pipe created:\n"
-                "subprocess {} -> {} self.a_stream.".format(
-                    audio_fdw, audio_fdr
-                    )
-                )
-            a_args = args + RAW_AUDIO
-            if seek:
-                a_args += ["-ss", str(seek)]
-            if self.dur:
-                a_args += ["-t", str(self.dur)]
-            a_args += ["pipe:{}".format(audio_fdw)]
-
-            # Create subprocess
-            self.process = subprocess.Popen(
-                a_args,
-                pass_fds=write_fds,
-                stdout=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                preexec_fn=_redirect_stderr_to_log_file,
-                )
-            self.logger.debug(
-                SUBPROCESS_LOG.format(
-                    self.process.pid, a_args
-                    )
-                )
-        for fd in write_fds:
-            # Close write file descriptors.
-            os.close(fd)
-            self.logger.debug("closed fd {}.".format(fd))
-
-    @staticmethod
-    def _remove_header(input, output):
-        logger = logging.getLogger(__name__+".Shot._remove_header")
-        logger.debug(
-            "Removing header from {}, piping the rest through {}.".format(
-                input, output
+    def run(self):
+        self.logger.debug(
+            "Thread starting : "
+            "removing header from {}, piping the rest through {}.".format(
+                self.input, self.output
                 )
             )
         try:
-            with open(input, "rb") as input, open(output, "wb") as output:
-                line = input.readline()
-                assert line[0:9] == b'YUV4MPEG2' and line[-1:] == b'\n', \
-                    [line, line[0:9], line[-1]]
-                # An AssertionError here might mean that the seek value
-                # exceeds the file length, in which case line == b''.
-                shutil.copyfileobj(input, output)
-        except:
-            raise
-
-#}}}
-class Cat():          #{{{
-    """Concatenate supplied Shot objects, provide read pipes.
-
-    Caller is responsible for closing the pipes.
-
-    """
-    def __init__(self):
-        self.logger = logging.getLogger(__name__+".Cat")
-        self.v_stream = None
-        self.a_stream = None
-        self.sequence = []
-
-    def append(self, shot):
-        self.sequence += [shot]
-
-    def process(self):
-        vpipe_r, self._vpipe_w = os.pipe()
-        apipe_r, self._apipe_w = os.pipe()
-        self.v_stream = open(vpipe_r, "rb")
-        self.a_stream = open(apipe_r, "rb")
-        self.logger.debug(
-            "Video pipe created:\nwrite to {}, read from {}\n"
-            "Audio pipe created:\nwrite to {}, read from {}".format(
-                self._vpipe_w, vpipe_r, self._apipe_w, apipe_r
-                )
-            )
-        self.thread = threading.Thread(
-            target=self._process_thread,
-            )
-        self.thread.start()
-
-    def _process_thread(self):
-        v_queue = queue.Queue(maxsize=2)
-        v_thread = threading.Thread(
-            target=self._concatenate_streams,
-            args=(v_queue, open(self._vpipe_w, "wb"))
-            )
-        v_thread.start()
-        a_queue = queue.Queue(maxsize=2)
-        a_thread = threading.Thread(
-            target=self._concatenate_streams,
-            args=(a_queue, open(self._apipe_w, "wb")),
-            )
-        a_thread.start()
-        i = 0
-        for shot in self.sequence:
-            shot.demux(remove_header=i)
-            i += 1
-            v_queue.put(shot.v_stream)
-            a_queue.put(shot.a_stream)
-            self.logger.debug(
-                "Demultiplexing {}\n"
-                "Reading video from {} and audio from {}".format(
-                    shot, shot.v_stream, shot.a_stream
+            line = self.input.readline()
+            if line == b"":
+                self.logger.warning(
+                    "No data found on input {}!".format(self.input)
                     )
-                )
-        v_queue.put(None)
-        a_queue.put(None)
+                self.exception = ValueError("No data found on input.")
+                self.finished.set()
+                return
+            if line[0:9] != b"YUV4MPEG2":
+                # This might mean that the seek value exceeds the file
+                # length, in which case line == b''.
+                self.logger.warning(
+                    "File {} does not seem to start with a header.".format(
+                        self.input
+                        )
+                    )
+            self.logger.debug("Header removed:\n{}".format(repr(line)))
 
-    @staticmethod
-    def _concatenate_streams(queue, output):
-        logger = logging.getLogger(__name__+".Cat")
-        #import pdb; pdb.set_trace()
-        while True:
-            i = queue.get()
-            if i is not None:
-                logger.debug("Concatenating {} to {}.".format(i, output))
-                #shutil.copyfileobj(i, output)
-                while True:
-                    buf = i.read(16*1024)
-                    #logger.debug("{} {:9} -> {:9} {}".format(
-                    #        i.fileno(), len(buf), "", output.fileno()
-                    #        )
-                    #    )
-                    if buf == b'':
-                        break
-                    l = output.write(buf)
-                    #logger.debug("{} {:9} -> {:9} {}".format(
-                    #        i.fileno(), "", l, output.fileno()
-                    #        )
-                    #    )
-                i.close()
-                logger.debug("Finished reading {} and closed it.".format(i))
+            while True:
+                # Copy bytes from input to output. Increment tallies.
+                # Check self.finished.is_set() in main thread befor waiting.
+                self.read_barrier.wait()
+                # read1() is more predictable for unittests.
+                buf = self.input.read1(64 * 1024)
+                if buf == b"":
+                    self.finished.set()
+                    self.write_barrier.wait()
+                    break
+                self.bytes_read += len(buf)
+                self.write_barrier.wait()
+                # If timed out, check self.finished.is_set() in the main
+                # thread.
+                self.bytes_written += self.output.write(buf)
+        except OSError as err:
+            if err.errno in (errno.EPIPE, errno.EBADFD):
+                self.logger.warning("Pipe unexpectedly broken.")
             else:
-                break
-        output.close()
-        logger.debug("Closed {}.".format(output))
-
-#}}}
-class Player():       #{{{
-    """ffplay
-
-    Argument can be a path name sting, an int or a file object
-    which has a fileno() method.
-
-    """
-    def __init__(self, file):
-        self.logger = logging.getLogger(__name__+".Player")
-        args = ["ffplay", "-autoexit"]
-        # Find out what is file.
-        if isinstance(file, str):
-            self.logger.debug("File is string \"{}\".".format(file))
-            args.append(file)
-            file = subprocess.DEVNULL
-        elif isinstance(file, int):
-            self.logger.debug("File is int {}.".format(file))
-            args.append("pipe:")
-        elif isinstance(file.fileno(), int):
-            self.logger.debug("File is file object {}.".format(file))
-            args.append("pipe:")
-            file = file.fileno()
-        else:
-            raise ValueError(
-                "Argument must be string, int or file object, got {}.".format(
-                    type(file)
+                self.exception = err
+                self.logger.error(
+                    "Pipe closed while piping {} to {}: {}".format(
+                        self.input, self.output
+                        )
+                    )
+        except threading.BrokenBarrierError as err:
+            self.exception = err
+            if self.read_barrier.broken:
+                barrier = "read"
+            elif self.write_barrier.broken:
+                barrier = "write"
+            else:
+                barrier = "some unknown"
+            self.logger.error(
+                "{} barrier broken while piping {} to {}: {}".format(
+                    barrier, self.input, self.output, err
                     )
                 )
-        #self.logger.debug("Passing file descriptors : {}".format(pass_fds))
-        self.process = subprocess.Popen(
-            args,
-            stdin=file,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            #pass_fds=pass_fds,
-            preexec_fn=_redirect_stderr_to_log_file,
-            )
-        self.logger.debug(
-            SUBPROCESS_LOG.format(
-                self.process.pid, args
+        except Exception as err:
+            self.exception = err
+            self.logger.error(
+                "Error occurred while piping {} to {}: {}".format(
+                    self.input, self.output, err
+                    )
                 )
-            )
-        if isinstance(file, int):
-            os.close(file)
-            self.logger.debug("Closed fd {}.".format(file))
+        finally:
+            if not self.input.closed:
+                self.input.close()
+                self.logger.debug("Closed {}".format(self.input))
+            if not self.output.closed:
+                self.output.close()
+                self.logger.debug("Closed {}".format(self.output))
 
-#}}}
-class Multiplexer():  #{{{
-    def __init__(self, v_stream, a_stream):
-        self.logger = logging.getLogger(__name__+".Multiplexer")
-        self.v_stream = self._get_fileno(v_stream)
-        self.a_stream = self._get_fileno(a_stream)
+    def get_bytes_read(self):
+        return self.bytes_read
 
-    def mux(self):
-        self.logger.debug("Muxing video {} and audio {}.".format(
-            self.v_stream, self.a_stream))
-        rv = RAW_VIDEO[:]
-        rv.remove("-an")
-        ra = RAW_AUDIO[:]
-        ra.remove("-vn")
-        args = [
-            "ffmpeg", "-y",
-            ] + rv + ["-i", "pipe:{}".format(self.v_stream),
-            ] + ra + ["-i", "pipe:{}".format(self.a_stream),
-            ] + OUTPUT_FORMAT + ["pipe:1",
-            ]
-        self.process = subprocess.Popen(
-            args,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            pass_fds=(self.v_stream, self.a_stream),
-            preexec_fn=_redirect_stderr_to_log_file,
-            )
-        self.logger.debug(
-            SUBPROCESS_LOG.format(
-                self.process.pid, args
-                )
-            )
-        os.close(self.v_stream)
-        os.close(self.a_stream)
-        self.logger.debug(
-            "Closed fd {} and {} after spawning subprocess.".format(
-                self.v_stream, self.a_stream
-                )
-            )
-        self.output = self.process.stdout
-        return self.process.stdout
-
-    @staticmethod
-    def _get_fileno(file):
-        # Find out what is file.
-        if isinstance(file, int):
-            return file
-        else:
-            try:
-                return file.fileno()
-            except AttributeError:
-                return None
-#}}}
+    def get_bytes_written(self):
+        return self.bytes_written
