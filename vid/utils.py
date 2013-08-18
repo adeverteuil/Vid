@@ -219,6 +219,7 @@ class ConcatenateStreams(threading.Thread):      #{{{1
             while True:
                 fileobj = self.queue.get()
                 if fileobj is None:
+                    self.logger.debug("Received end of queue signal.")
                     self.queue.task_done()
                     raise queue.Empty
                 assert isinstance(fileobj, io.IOBase)
@@ -262,6 +263,7 @@ class SubprocessSupervisor(threading.Thread):    #{{{1
         super(SubprocessSupervisor, self).__init__(*args, **kwargs)
 
     def run(self):
+        self.logger.debug("Thread started, waiting on {}.".format(self.fn))
         for callable in self.fn:
             rv = callable()
             self.logger.debug(
@@ -337,7 +339,7 @@ class Shot():                                    #{{{1
         I call one subprocess per stream.
         """
         assert video or audio
-        args = ["ffmpeg", "-y"]
+        args = ["ffmpeg", "-loglevel", "debug", "-y"]
         write_fds = []
         returnvalue = []
         self.logger.debug("Demuxing {}.".format(self))
@@ -436,7 +438,7 @@ class Shot():                                    #{{{1
                 )
             self.logger.debug(
                 SUBPROCESS_LOG.format(
-                    self.a_process.pid, args
+                    self.a_process.pid, a_args
                     )
                 )
         for fd in write_fds:
@@ -464,7 +466,7 @@ class Player():                                  #{{{1
     """
     def __init__(self, file):
         self.logger = logging.getLogger(__name__+".Player")
-        args = ["ffplay", "-autoexit"]
+        args = ["ffplay", "-loglevel", "debug", "-autoexit"]
         # Find out what is file.
         if isinstance(file, str):
             self.logger.debug("File is string \"{}\".".format(file))
@@ -517,7 +519,7 @@ class Multiplexer():                             #{{{1
         ra = RAW_AUDIO[:]
         ra.remove("-vn")
         args = [
-            "ffmpeg", "-y",
+            "ffmpeg", "-loglevel", "debug", "-y",
             ] + rv + ["-i", "pipe:{}".format(self.v_fd),
             ] + ra + ["-i", "pipe:{}".format(self.a_fd),
             ] + OUTPUT_FORMAT + ["pipe:1",
