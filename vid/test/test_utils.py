@@ -350,3 +350,16 @@ class UtilsTestCase(unittest.TestCase):
         #muxed = muxer.mux()
         player = Player(muxer.mux())
         self.assertEqual(player.process.wait(), 0)
+
+    def test_subprocesssupervisor(self):
+        logger = logging.getLogger(__name__+".test_subprocesssupervisor")
+        logger.debug("Testing SubprocessSupervisor.")
+        lock = threading.Lock()
+        lock.acquire()
+        p = subprocess.Popen("sleep 0.1", shell=True)
+        SubprocessSupervisor(
+            (p.wait,p.wait),
+            lock.release,
+            name="test",
+            ).start()
+        self.assertTrue(lock.acquire(timeout=1))

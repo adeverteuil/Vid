@@ -242,6 +242,37 @@ class ConcatenateStreams(threading.Thread):      #{{{1
                 )
 
 
+class SubprocessSupervisor(threading.Thread):    #{{{1
+    """Thread subprocess that calls fn, then calls action.
+
+    fn is an iterable of callable objects.
+    name keyword argument will be passed to the parent class constructor and
+    used in the debugging stream.
+
+    This is useful as a subprocess supervisor and lock releaser. Here is an
+    example usage:
+    SubprocessSupervisor(subprocess.wait, lock.release)
+    """
+
+    def __init__(self, fn, action, *args, **kwargs):
+        self.logger = logging.getLogger(__name__+".SubprocessSupervisor")
+        self.fn = fn
+        self.action = action
+
+        super(SubprocessSupervisor, self).__init__(*args, **kwargs)
+
+    def run(self):
+        for callable in self.fn:
+            rv = callable()
+            self.logger.debug(
+                "Process {} terminated. Returned {}.".format(callable, rv)
+                )
+        self.logger.debug(
+            "Process \"{}\" finished. Executing action.".format(self.name)
+            )
+        self.action()
+
+
 class Shot():                                    #{{{1
     """Abstraction for a movie file copied from the camcorder.
 

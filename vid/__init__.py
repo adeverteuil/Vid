@@ -23,6 +23,7 @@ __all__ = [
     "Player",
     #"Cat",
     "Multiplexer",
+    "SubprocessSupervisor",
     #"Stream",
     #"VideoStream",
     #"AudioStream",
