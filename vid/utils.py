@@ -275,6 +275,90 @@ class SubprocessSupervisor(threading.Thread):    #{{{1
         self.action()
 
 
+class ConcatenateShots(threading.Thread):        #{{{1
+    """Threading subclass to concatenate many cuts in one movie.
+
+    Works with two streams at once. Instantiates ConcatenateStreams and
+    manages resources by limiting spawned subprocesses.
+
+    Constructor takes three arguments: one queue.Queue objects, one writable
+    file object to write video and another for audio.
+
+    Queued objects must be Shot instances, and None to signal end of queue.
+    """
+
+    def __init__(self, q, v_out, a_out):
+        self.logger = logging.getLogger(__name__+".ConcatenateShots")
+
+        assert isinstance(q, queue.Queue)
+        assert isinstance(v_out, io.IOBase)
+        assert isinstance(a_out, io.IOBase)
+        assert v_out.writable()
+        assert a_out.writable()
+
+        self.queue = q
+        self.exception = None
+        self.finished = threading.Event()
+        # A semaphore with a limit of 2 ensures that one process is in a
+        # waiting, blocked state while the previous process is working.
+        self.semaphore = threading.Semaphore(value=2)
+        self.v_queue = queue.Queue()
+        self.a_queue = queue.Queue()
+        self.v_out = v_out
+        self.a_out = a_out
+
+        super(ConcatenateShots, self).__init__()
+
+    def run(self):
+        self.logger.debug("Thread starting: Concatenating shots.")
+        try:
+            v_cat = ConcatenateStreams(self.v_queue, self.v_out)
+            a_cat = ConcatenateStreams(self.a_queue, self.a_out)
+            v_cat.start()
+            a_cat.start()
+            i = 0
+            buffer = []
+            # Allow that many seconds of buffer by releasing more semaphores.
+            min_buffer = 10
+            while True:
+                shot = self.queue.get()
+                if shot is None:
+                    self.logger.debug("End of queue signal recieved.")
+                    self.v_queue.put(None)
+                    self.a_queue.put(None)
+                    self.queue.task_done()
+                    raise queue.Empty
+                assert isinstance(shot, Shot)
+                buffer.append(shot.dur)
+                if (sum(buffer) < min_buffer and
+                    not self.semaphore.acquire(blocking=False)
+                    ):
+                    self.logger.debug(
+                        "Buffer not long enough. ({}) "
+                        "Allowing one more subprocess to run.".format(buffer)
+                        )
+                    self.semaphore.release()
+                self.semaphore.acquire()
+                self.logger.debug(
+                    "Concatenating {}.".format(shot)
+                    )
+                shot.demux(remove_header=i)
+                i += 1
+                self.v_queue.put(shot.v_stream)
+                self.a_queue.put(shot.a_stream)
+                SubprocessSupervisor(
+                    (shot.v_process.wait, shot.a_process.wait),
+                    self.semaphore.release,
+                    name="Demuxing {}.".format(shot),
+                    ).start()
+        except queue.Empty:
+            self.finished.set()
+        except Exception as err:
+            self.logger.error("Error occured: {}.".format(err))
+            self.exception = err
+            raise
+
+
 class Shot():                                    #{{{1
     """Abstraction for a movie file copied from the camcorder.
 

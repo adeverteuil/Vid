@@ -19,6 +19,7 @@ __all__ = [
     "RAW_VIDEO",
     "RemoveHeader",
     "ConcatenateStreams",
+    "ConcatenateShots",
     "Shot",
     "Player",
     #"Cat",

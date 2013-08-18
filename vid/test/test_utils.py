@@ -363,3 +363,30 @@ class UtilsTestCase(unittest.TestCase):
             name="test",
             ).start()
         self.assertTrue(lock.acquire(timeout=1))
+
+    def test_concatenateshots(self):
+        logger = logging.getLogger(__name__+".test_concatenateshots")
+        logger.debug("Testing ConcatenateShots.")
+        fvr, fvw = os.pipe()
+        vr = open(fvr, "rb")
+        vw = open(fvw, "wb")
+        far, faw = os.pipe()
+        ar = open(far, "rb")
+        aw = open(faw, "wb")
+        logger.debug(
+            "Created pipes video {} -> {} and audio {} -> {}.".format(
+                fvw, fvr, faw, far
+                )
+            )
+        q = queue.Queue()
+        cat = ConcatenateShots(q, vw, aw)
+        muxer = Multiplexer(vr, ar)
+        player = Player(muxer.mux())
+        #q.put(Shot(54).cut(0, 10))
+        for i in [4, 2, 6, 1, 5, 3, 9, 8, 7, 0]:
+            q.put(Shot(54).cut(i, .1))
+        q.put(None)
+        cat.start()
+        #q.join()
+        muxer.process.wait()
+        player.process.wait()
