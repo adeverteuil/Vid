@@ -437,3 +437,12 @@ class UtilsTestCase(unittest.TestCase):
         silence = shot.demux(video=False)[0].read()
         shot.a_stream.close()
         self.assertEqual(len(sound), len(silence))
+
+    def test_add_filter(self):
+        logger = logging.getLogger(__name__+".test_add_filter")
+        logger.debug("Testing Shot.add_filter()")
+        shot = Shot(54).cut(4, 5).add_filter("showdata")
+        shot.demux()
+        multiplexer = Multiplexer(shot.v_stream, shot.a_stream)
+        player = Player(multiplexer.mux())
+        player.process.wait()

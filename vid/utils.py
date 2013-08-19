@@ -441,6 +441,7 @@ class Shot():                                    #{{{1
         self.v_stream = None
         self.a_stream = None
         self.silent = False
+        self.filters = [("yadif", {})]  # Always deinterlace.
         pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
             folder="A roll",
             prefix="M2U",
@@ -506,7 +507,7 @@ class Shot():                                    #{{{1
 
         # Define video arguments.
         if video:
-            v_args = args + ["-filter:v", "yadif"]  # Always deinterlace.
+            v_args = args[:]  # Shallow copy.
             if remove_header:
                 video1_r, video1_w = os.pipe()
                 video2_r, video2_w = os.pipe()
@@ -524,6 +525,7 @@ class Shot():                                    #{{{1
                     v_args += ["-ss", str(seek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
+                v_args += self._format_filters()
                 v_args += RAW_VIDEO + ["-an", "pipe:{}".format(video1_w)]
                 t.start()
             else:
@@ -540,6 +542,7 @@ class Shot():                                    #{{{1
                     v_args += ["-ss", str(seek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
+                v_args += self._format_filters()
                 v_args += RAW_VIDEO + ["-an", "pipe:{}".format(video_w)]
             returnvalue.append(self.v_stream)
 
@@ -630,6 +633,51 @@ class Shot():                                    #{{{1
     def generate_silence(self):
         self.logger.debug("Make silent movie.")
         self.silent = True
+        return self
+
+    def _format_filters(self):
+        """Build filter string for ffmpeg argument.
+
+        Make this happen:
+        ["-filter:v", "name,name=k=v,name=k=v:k=v:k=v"]
+        """
+        self.logger.debug(
+            "Processing filters {}.".format(self.filters)
+            )
+        returnvalue = ["-filter:v"]
+        strings = []
+        for filter in self.filters:
+            name = filter[0]
+            args = filter[1]
+            if args:
+                arglist = []
+                for k, v in args.items():
+                    # Quote values, first escaping existing quotes.
+                    v = "'{}'".format(v.replace("'", "\\'"))
+                    arglist.append("=".join((k, v)))
+                string = "=".join([name, ":".join(arglist)])
+            else:
+                string = name
+            strings.append(string)
+        returnvalue.append(",".join(strings))
+        return returnvalue
+
+    def add_filter(self, filtername, **kwargs):
+        self.logger.debug(
+            "Adding filter {} with options {}.".format(filtername, kwargs)
+            )
+        if filtername == "showdata":
+            self.add_filter(
+                "drawtext",
+                text="{}\n%{{pts}}\n%{{n}}".format(self.name),
+                y="h-text_h-20",
+                x="30",
+                fontcolor="red",
+                fontsize="25",
+                fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
+                )
+        else:
+            self.filters.append((filtername, kwargs))
         return self
 
 
