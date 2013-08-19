@@ -1,3 +1,5 @@
+# vim:cc=80:fdm=marker:fdl=0:fdc=1
+#
 # utils.py
 # Copyright © 2013  Alexandre de Verteuil        {{{1
 #
@@ -16,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #}}}
-# vim:cc=80:fdm=marker:fdl=0:fdc=1
 
 
 import os
@@ -37,10 +38,10 @@ import subprocess
 
 
 FASTSEEK_THRESHOLD = 30  # Seconds
-RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo", "-an"]
+RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo"]
 RAW_AUDIO = [
     "-f", "u16le", "-acodec", "pcm_s16le",
-    "-ac", "2", "-ar", "44100", "-vn",
+    "-ac", "2", "-ar", "44100",
     ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
 OUTPUT_FORMAT = [
@@ -67,7 +68,8 @@ def _redirect_stderr_to_log_file():              #{{{1
     pid = os.getpid()
     file = open(logdir+"/p{}.log".format(pid), "w")
     os.dup2(file.fileno(), sys.stderr.fileno())
-    file.write("Log for subprocess id {}.\n\n".format(pid))
+    file.close()
+    sys.stderr.write("Log for subprocess id {}.\n\n".format(pid))
     ls = "Open file descriptors:\n"
     for fd in os.listdir("/proc/self/fd"):
         pathname = "/proc/self/fd/" + str(fd)
@@ -82,8 +84,8 @@ def _redirect_stderr_to_log_file():              #{{{1
                 )
         except FileNotFoundError:
             continue
-    file.write(ls)
-    file.write("\n-- start stderr stream -- \n\n")
+    sys.stderr.write(ls)
+    sys.stderr.write("\n-- start stderr stream -- \n\n")
 
 
 class RemoveHeader(threading.Thread):            #{{{1
@@ -203,6 +205,51 @@ class RemoveHeader(threading.Thread):            #{{{1
 
     def get_bytes_written(self):
         return self.bytes_written
+
+
+class GenerateSilence(threading.Thread):         #{{{1
+    """Threading subclass that pipes raw audio replacing all bytes with zeroes.
+    """
+
+    def __init__(self, input, output):
+        self.logger = logging.getLogger(__name__+".GenerateSilence")
+
+        assert isinstance(input, io.IOBase)
+        assert input.readable()
+        assert isinstance(output, io.IOBase)
+        assert output.writable()
+
+        self.input = input
+        self.output = output
+        self.bytes_read = 0     # Number of bytes read.
+        self.bytes_written = 0  # Number of bytes written.
+        self.exception = None
+        self.finished = threading.Event()
+
+        super(GenerateSilence, self).__init__()
+
+    def run(self):
+        self.logger.debug(
+            "Thread starting: "
+            "Replacing all bytes from {} with zeroes, piping to {}.".format(
+                self.input, self.output
+                )
+            )
+        try:
+            while True:
+                buf = self.input.read1(64 * 1024)
+                self.bytes_read += len(buf)
+                if buf == b'':
+                    self.finished.set()
+                    break
+                self.bytes_written += self.output.write(b'\x00'*len(buf))
+        finally:
+            if not self.input.closed:
+                self.input.close()
+                self.logger.debug("Closed {}".format(self.input))
+            if not self.output.closed:
+                self.output.close()
+                self.logger.debug("Closed {}".format(self.output))
 
 
 class ConcatenateStreams(threading.Thread):      #{{{1
@@ -353,7 +400,8 @@ class ConcatenateShots(threading.Thread):        #{{{1
                         "Allowing one more subprocess to run.".format(buffer)
                         )
                     self.semaphore.release()
-                self.semaphore.acquire()
+                # This is not thought through.
+                #self.semaphore.acquire()
                 self.logger.debug(
                     "Concatenating {}.".format(shot)
                     )
@@ -392,6 +440,7 @@ class Shot():                                    #{{{1
         self.process = None
         self.v_stream = None
         self.a_stream = None
+        self.silent = False
         pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
             folder="A roll",
             prefix="M2U",
@@ -475,7 +524,7 @@ class Shot():                                    #{{{1
                     v_args += ["-ss", str(seek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
-                v_args += RAW_VIDEO + ["pipe:{}".format(video1_w)]
+                v_args += RAW_VIDEO + ["-an", "pipe:{}".format(video1_w)]
                 t.start()
             else:
                 video_r, video_w = os.pipe()
@@ -491,7 +540,7 @@ class Shot():                                    #{{{1
                     v_args += ["-ss", str(seek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
-                v_args += RAW_VIDEO + ["pipe:{}".format(video_w)]
+                v_args += RAW_VIDEO + ["-an", "pipe:{}".format(video_w)]
             returnvalue.append(self.v_stream)
 
             # Create subprocess
@@ -510,22 +559,43 @@ class Shot():                                    #{{{1
 
         # Define audio arguments
         if audio:
-            audio_r, audio_w = os.pipe()
-            write_fds.append(audio_w)
-            self.a_stream = open(audio_r, "rb")
-            returnvalue.append(self.a_stream)
-            self.logger.debug(
-                "Audio pipe created:\n"
-                "subprocess {} -> {} self.a_stream.".format(
-                    audio_w, audio_r
+            a_args = args[:]  # Shallow copy
+            if self.silent:
+                audio1_r, audio1_w = os.pipe()
+                audio2_r, audio2_w = os.pipe()
+                audio_w = audio1_w
+                self.logger.debug(
+                    "Audio pipes created:\n"
+                    "subprocess {} -> {} GenerateSilence;\n"
+                    "GenerateSilence {} -> {} self.a_stream".format(
+                        audio1_w, audio1_r, audio2_w, audio2_r
+                        )
                     )
-                )
-            a_args = args + RAW_AUDIO
-            if seek:
-                a_args += ["-ss", str(seek)]
-            if self.dur:
-                a_args += ["-t", str(self.dur)]
-            a_args += ["pipe:{}".format(audio_w)]
+                t = GenerateSilence(open(audio1_r, "rb"), open(audio2_w, "wb"))
+                write_fds.append(audio1_w)
+                self.a_stream = open(audio2_r, "rb")
+                if seek:
+                    a_args += ["-ss", str(seek)]
+                if self.dur:
+                    a_args += ["-t", str(self.dur)]
+                a_args += RAW_AUDIO + ["-vn", "pipe:{}".format(audio1_w)]
+                t.start()
+            else:
+                audio_r, audio_w = os.pipe()
+                self.a_stream = open(audio_r, "rb")
+                self.logger.debug(
+                    "Audio pipe created:\n"
+                    "subprocess {} -> {} self.a_stream.".format(
+                        audio_w, audio_r
+                        )
+                    )
+                write_fds.append(audio_w)
+                if seek:
+                    a_args += ["-ss", str(seek)]
+                if self.dur:
+                    a_args += ["-t", str(self.dur)]
+                a_args += RAW_AUDIO + ["-vn", "pipe:{}".format(audio_w)]
+            returnvalue.append(self.a_stream)
 
             # Create subprocess.
             self.a_process = subprocess.Popen(
@@ -556,6 +626,12 @@ class Shot():                                    #{{{1
         return self
         # This allows instantiation and cutting at once :
         # Shot(<number>).cut(seek, dur)
+
+    def generate_silence(self):
+        self.logger.debug("Make silent movie.")
+        self.silent = True
+        return self
+
 
 class Player():                                  #{{{1
     """A wrapper for ffplay.
@@ -613,14 +689,10 @@ class Multiplexer():                             #{{{1
     def mux(self):
         self.logger.debug("Muxing video {} and audio {}.".format(
             self.v_fd, self.a_fd))
-        rv = RAW_VIDEO[:]
-        rv.remove("-an")
-        ra = RAW_AUDIO[:]
-        ra.remove("-vn")
         args = [
             "ffmpeg", "-loglevel", "debug", "-y",
-            ] + rv + ["-i", "pipe:{}".format(self.v_fd),
-            ] + ra + ["-i", "pipe:{}".format(self.a_fd),
+            ] + RAW_VIDEO + ["-i", "pipe:{}".format(self.v_fd),
+            ] + RAW_AUDIO + ["-i", "pipe:{}".format(self.a_fd),
             ] + OUTPUT_FORMAT + ["pipe:1",
             ]
         self.process = subprocess.Popen(

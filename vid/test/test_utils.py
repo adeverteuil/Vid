@@ -1,3 +1,5 @@
+# vim:cc=80:fdm=marker:fdl=0:fdc=1
+#
 # test_utils.py
 # Copyright © 2013  Alexandre de Verteuil        {{{1
 #
@@ -16,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #}}}
-# vim:cc=80:fdm=marker:fdl=0:fdc=1
 
 
 import io
@@ -398,10 +399,41 @@ class UtilsTestCase(unittest.TestCase):
         muxer = Multiplexer(vr, ar)
         player = Player(muxer.mux())
         #q.put(Shot(54).cut(0, 10))
+        silence = 0
         for i in [4, 2, 6, 1, 5, 3, 9, 8, 7, 0]:
-            q.put(Shot(54).cut(i, .1))
+            shot = Shot(54).cut(i, .1)
+            if silence % 2 == 0:
+                shot.generate_silence()
+            q.put(shot)
+            silence += 1
         q.put(None)
         cat.start()
         #q.join()
         muxer.process.wait()
         player.process.wait()
+
+    def test_shot_silent(self):
+        logger = logging.getLogger(__name__+".test_shot_silent")
+        logger.debug("Testing Shot.silent()")
+        shot = Shot(54).cut(0, 0.1).generate_silence()
+        silence = shot.demux(video=False)[0].read()
+        logger.debug("Stream length {}.".format(len(silence)))
+        # Let's assume it generated between 0.1 and 0.13 seconds of silence.
+        # 2 channels, 2 bytes (16 bits) per sample, 44100 sample rate.
+        duration = len(silence) / 2 / 2 / 44100
+        self.assertGreaterEqual(duration, 0.1)
+        self.assertLessEqual(duration, 0.13)
+        # It must have generated the same duration as the sound from the
+        # same clip.
+        shot = Shot(54).cut(0, 0.1)
+        sound = shot.demux(video=False)[0].read()
+        shot.a_stream.close()
+        self.assertEqual(len(sound), len(silence))
+        # Try the same without specifying duration.
+        shot = Shot(54)
+        sound = shot.demux(video=False)[0].read()
+        shot.a_stream.close()
+        shot = Shot(54).generate_silence()
+        silence = shot.demux(video=False)[0].read()
+        shot.a_stream.close()
+        self.assertEqual(len(sound), len(silence))
