@@ -446,3 +446,22 @@ class UtilsTestCase(unittest.TestCase):
         multiplexer = Multiplexer(shot.v_stream, shot.a_stream)
         player = Player(multiplexer.mux())
         player.process.wait()
+
+    def test_audioprocessing_mix(self):
+        logger = logging.getLogger(__name__+".test_audioprocessing_mix")
+        logger.debug("Testing Shot.add_filter()")
+        shot = Shot(54).cut(4, 5)
+        shot.demux()
+        mixer = AudioProcessing(shot.a_stream)
+        mixer.mix("music/Anitek_-_Nightlife.mp3")
+        multiplexer = Multiplexer(shot.v_stream, mixer.output_audio)
+        player = Player(multiplexer.mux())
+        returncodes = {
+            'shot.v_process': shot.v_process.wait(),
+            'shot.a_process': shot.a_process.wait(),
+            'mixer.process': mixer.process.wait(),
+            'multiplexer.process': multiplexer.process.wait(),
+            'player.process': player.process.wait(),
+            }
+        for k, v in returncodes.items():
+            self.assertEqual(v, 0, msg="Return codes: {}".format(returncodes))

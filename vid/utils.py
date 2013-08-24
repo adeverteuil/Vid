@@ -40,7 +40,7 @@ import subprocess
 FASTSEEK_THRESHOLD = 30  # Seconds
 RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo"]
 RAW_AUDIO = [
-    "-f", "u16le", "-acodec", "pcm_s16le",
+    "-f", "s16le", "-acodec", "pcm_s16le",
     "-ac", "2", "-ar", "44100",
     ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
@@ -205,6 +205,59 @@ class RemoveHeader(threading.Thread):            #{{{1
 
     def get_bytes_written(self):
         return self.bytes_written
+
+
+class PipeHelper(threading.Thread):              #{{{1
+    """Thread subclass that simply pipes data without processing.
+
+    For some reason yet to be known, this helps get bytes through
+    complex piping schemes. This ascii art graphic illustrates where
+    PipeHelper was necessary for successfully piping between two ffmpeg
+    instances. I think it has something to do with the block size of the
+    reading process which is too big for a pipe.
+
+           ,-> video_stream -----------------------,
+    demux <                                         ',
+           '-> audio_stream -,                        ',
+                              >-> mixer -> PipeHelper ---> mux
+               music_file ---'
+    """
+
+    def __init__(self, infile):
+        self.logger = logging.getLogger(__name__+".PipeHelper")
+
+        assert isinstance(infile, io.IOBase)
+        assert infile.readable()
+
+        self.input = infile
+        r, w = os.pipe()
+        self.output = open(r, "rb")
+        self._output = open(w, "wb")
+        self.bytes_read = 0
+        self.bytes_written = 0
+        self.exception = None
+
+        super(PipeHelper, self).__init__()
+
+    def run(self):
+        self.logger.debug(
+            "Thread starging: "
+            "Pulling data from {}, pushing through {}.".format(
+                self.input, self.output
+                )
+            )
+        try:
+            while True:
+                buf = self.input.read1(64 * 1024)
+                if buf == b"":
+                    break
+                self.bytes_read += len(buf)
+                self.bytes_written += self._output.write(buf)
+        except OSError as err:
+            self.logger.warning("Pipe unexpectedly broken.")
+        finally:
+            if not self._output.closed:
+                self._output.close()
 
 
 class GenerateSilence(threading.Thread):         #{{{1
@@ -777,3 +830,51 @@ class Multiplexer():                             #{{{1
                 return file.fileno()
             except AttributeError:
                 return None
+
+
+class AudioProcessing():                         #{{{1
+    """Apply audio filters to a stream."""
+
+    def __init__(self, audio_stream):
+        self.logger = logging.getLogger(__name__+".AudioProcessing")
+        assert isinstance(audio_stream, io.IOBase)
+        assert audio_stream.readable()
+
+        self.input_audio = audio_stream
+        self.process = None
+
+    def mix(self, music):
+        assert isinstance(music, str)
+
+        args = [
+            "ffmpeg", "-y", "-loglevel", "debug",
+            ] + RAW_AUDIO + [
+            "-i", "pipe:0",
+            "-i", music,
+            "-filter_complex", "amix=duration=first",
+            ] + RAW_AUDIO + [
+            "pipe:1",
+            ]
+        self.process = subprocess.Popen(
+            args,
+            stdin=self.input_audio,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=_redirect_stderr_to_log_file,
+            )
+        self.logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, args
+                )
+            )
+        p = PipeHelper(self.process.stdout)
+        p.start()
+        self.output_audio = p.output
+        self.input_audio.close()
+        self.logger.debug(
+            "Closed {} after spawning subprocess.\n"
+            "Output is {}.".format(
+                self.input_audio, self.output_audio
+                )
+            )
+        return self

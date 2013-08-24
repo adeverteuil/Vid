@@ -38,6 +38,7 @@ __all__ = [
     "Player",
     "Multiplexer",
     "SubprocessSupervisor",
+    "AudioProcessing",
     ]
 
 
