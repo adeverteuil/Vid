@@ -360,10 +360,15 @@ class UtilsTestCase(unittest.TestCase):
         shot = Shot(54).cut(0, 1)
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
-        #with open(os.devnull, "wb") as dn, muxer.mux() as m:
-        #    shutil.copyfileobj(m, dn)
-        #return
-        #muxed = muxer.mux()
+        player = Player(muxer.mux())
+        self.assertEqual(player.process.wait(), 0)
+
+        # Add filter "showdata" for Shot and Multiplexer.
+        l = 2
+        shot = Shot(54).cut(0, l).add_filter("showdata")
+        shot.demux()
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        muxer.add_filter("showdata", length=l)
         player = Player(muxer.mux())
         self.assertEqual(player.process.wait(), 0)
 

@@ -475,7 +475,61 @@ class ConcatenateShots(threading.Thread):        #{{{1
             raise
 
 
-class Shot():                                    #{{{1
+class FFmpegWrapper():                           #{{{1
+    """Provides utilities for subclasses that spawn ffmpeg subprocesses."""
+
+    def __init__(self):
+        self.filters = []
+
+    def _format_filters(self):
+        """Build filter string for ffmpeg argument.
+
+        Make this happen:
+        ["-filter:v", "name,name=k=v,name=k=v:k=v:k=v"]
+        """
+        if not self.filters:
+            return []
+        self.logger.debug(
+            "Processing filters {}.".format(self.filters)
+            )
+        returnvalue = []
+        strings = []
+        for filter in self.filters:
+            name = filter[0]
+            args = filter[1]
+            if args:
+                arglist = []
+                for k, v in args.items():
+                    # Quote values, first escaping existing quotes.
+                    v = "'{}'".format(v.replace("'", "\\'"))
+                    arglist.append("=".join((k, v)))
+                string = "=".join([name, ":".join(arglist)])
+            else:
+                string = name
+            strings.append(string)
+        returnvalue.append(",".join(strings))
+        return ["-filter:v"] + returnvalue
+
+    def add_filter(self, filtername, **kwargs):
+        self.logger.debug(
+            "Adding filter {} with options {}.".format(filtername, kwargs)
+            )
+        if filtername == "showdata":
+            self.add_filter(
+                "drawtext",
+                text="{}\n%{{pts}}\n%{{n}}".format(self.name),
+                y="h-text_h-20",
+                x="30",
+                fontcolor="red",
+                fontsize="25",
+                fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
+                )
+        else:
+            self.filters.append((filtername, kwargs))
+        return self
+
+
+class Shot(FFmpegWrapper):                                    #{{{1
     """Abstraction for a movie file copied from the camcorder.
 
     The constructor takes an integer as a parameter and finds the
@@ -688,49 +742,24 @@ class Shot():                                    #{{{1
         self.silent = True
         return self
 
-    def _format_filters(self):
-        """Build filter string for ffmpeg argument.
-
-        Make this happen:
-        ["-filter:v", "name,name=k=v,name=k=v:k=v:k=v"]
-        """
-        self.logger.debug(
-            "Processing filters {}.".format(self.filters)
-            )
-        returnvalue = ["-filter:v"]
-        strings = []
-        for filter in self.filters:
-            name = filter[0]
-            args = filter[1]
-            if args:
-                arglist = []
-                for k, v in args.items():
-                    # Quote values, first escaping existing quotes.
-                    v = "'{}'".format(v.replace("'", "\\'"))
-                    arglist.append("=".join((k, v)))
-                string = "=".join([name, ":".join(arglist)])
-            else:
-                string = name
-            strings.append(string)
-        returnvalue.append(",".join(strings))
-        return returnvalue
-
     def add_filter(self, filtername, **kwargs):
         self.logger.debug(
             "Adding filter {} with options {}.".format(filtername, kwargs)
             )
         if filtername == "showdata":
-            self.add_filter(
+            super().add_filter(
                 "drawtext",
-                text="{}\n%{{pts}}\n%{{n}}".format(self.name),
+                text="%{{pts}}    %{{n}}\n{}".format(self.name),
                 y="h-text_h-20",
                 x="30",
-                fontcolor="red",
+                fontcolor="white",
                 fontsize="25",
                 fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
+                box="1",
+                boxcolor="0x000000aa",
                 )
         else:
-            self.filters.append((filtername, kwargs))
+            super().add_filter(filtername, **kwargs)
         return self
 
 
@@ -779,13 +808,14 @@ class Player():                                  #{{{1
             file.close()
             self.logger.debug("Closed file object {}.".format(file))
 
-class Multiplexer():                             #{{{1
+class Multiplexer(FFmpegWrapper):                             #{{{1
     """Multiplex video and audio stream in a container format."""
 
     def __init__(self, v_stream, a_stream):
         self.logger = logging.getLogger(__name__+".Multiplexer")
         self.v_fd = self._get_fileno(v_stream)
         self.a_fd = self._get_fileno(a_stream)
+        super().__init__()
 
     def mux(self):
         self.logger.debug("Muxing video {} and audio {}.".format(
@@ -794,6 +824,7 @@ class Multiplexer():                             #{{{1
             "ffmpeg", "-loglevel", "debug", "-y",
             ] + RAW_VIDEO + ["-i", "pipe:{}".format(self.v_fd),
             ] + RAW_AUDIO + ["-i", "pipe:{}".format(self.a_fd),
+            ] + self._format_filters() + [
             ] + OUTPUT_FORMAT + ["pipe:1",
             ]
         self.process = subprocess.Popen(
@@ -831,6 +862,31 @@ class Multiplexer():                             #{{{1
             except AttributeError:
                 return None
 
+    def add_filter(self, filtername, **kwargs):
+        self.logger.debug(
+            "Adding filter {} with options {}.".format(filtername, kwargs)
+            )
+        if filtername == "showdata":
+            # Print timecode and, if length is provided, length.
+            try:
+                t = "/{:.6f}".format(kwargs['length'])
+                del kwargs['length']
+            except KeyError:
+                t = ""
+            super().add_filter(
+                "drawtext",
+                text="%{{pts}}{}".format(t),
+                y="20",
+                x="w-text_w-20",
+                fontcolor="white",
+                fontsize="25",
+                fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
+                box="1",
+                boxcolor="0x000000aa",
+                )
+        else:
+            super().add_filter(filtername, **kwargs)
+        return self
 
 class AudioProcessing():                         #{{{1
     """Apply audio filters to a stream."""
