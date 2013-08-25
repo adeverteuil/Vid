@@ -447,6 +447,18 @@ class UtilsTestCase(unittest.TestCase):
         logger = logging.getLogger(__name__+".test_add_filter")
         logger.debug("Testing Shot.add_filter()")
         shot = Shot(54).cut(4, 5).add_filter("showdata")
+        shot.add_filter(
+            "drawtext",
+            x="w/2-text_w/2",
+            y="h/2-text_h/2",
+            #text="':,[]\\",
+            text="special characters escaping :',\\['];",
+            fontcolor="white",
+            fontsize="25",
+            fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
+            box="1",
+            boxcolor="0x000000aa",
+            )
         shot.demux()
         multiplexer = Multiplexer(shot.v_stream, shot.a_stream)
         player = Player(multiplexer.mux())

@@ -22,6 +22,7 @@
 
 import os
 import io
+import re
 import sys
 import glob
 import stat
@@ -493,39 +494,36 @@ class FFmpegWrapper():                           #{{{1
             "Processing filters {}.".format(self.filters)
             )
         returnvalue = []
-        strings = []
+        filterchain = []
         for filter in self.filters:
             name = filter[0]
             args = filter[1]
             if args:
                 arglist = []
                 for k, v in args.items():
-                    # Quote values, first escaping existing quotes.
-                    v = "'{}'".format(v.replace("'", "\\'"))
+                    # Convert numbers to string.
+                    v = str(v)
+                    # Third level of escaping.
+                    v = re.sub("([][,;])", r"\\\1", v)
+                    # Second level of escaping for filtergraph description string.
+                    v = v.replace("\\", "\\\\").replace("'", "'\\\\\\''")
+                    # First level of escaping for the filter arguments.
+                    v = v.replace(":", "\\:")
+                    # Quoting.
+                    v = "'{}'".format(v)
                     arglist.append("=".join((k, v)))
                 string = "=".join([name, ":".join(arglist)])
             else:
                 string = name
-            strings.append(string)
-        returnvalue.append(",".join(strings))
+            filterchain.append(string)
+        returnvalue.append(",".join(filterchain))
         return ["-filter:v"] + returnvalue
 
     def add_filter(self, filtername, **kwargs):
         self.logger.debug(
             "Adding filter {} with options {}.".format(filtername, kwargs)
             )
-        if filtername == "showdata":
-            self.add_filter(
-                "drawtext",
-                text="{}\n%{{pts}}\n%{{n}}".format(self.name),
-                y="h-text_h-20",
-                x="30",
-                fontcolor="red",
-                fontsize="25",
-                fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
-                )
-        else:
-            self.filters.append((filtername, kwargs))
+        self.filters.append((filtername, kwargs))
         return self
 
 
