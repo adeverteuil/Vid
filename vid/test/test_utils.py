@@ -482,3 +482,9 @@ class UtilsTestCase(unittest.TestCase):
             }
         for k, v in returncodes.items():
             self.assertEqual(v, 0, msg="Return codes: {}".format(returncodes))
+
+    def test_probe_duration(self):
+        logger = logging.getLogger(__name__+".test_audioprocessing_mix")
+        logger.debug("Testing Shot.add_filter()")
+        probe = Probe("A roll/testsequence/M2U00054.mpg")
+        self.assertIsInstance(probe.get_duration(), float)

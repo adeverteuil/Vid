@@ -26,6 +26,7 @@ import re
 import sys
 import glob
 import stat
+import json
 import errno
 import queue
 import pprint
@@ -52,6 +53,20 @@ OUTPUT_FORMAT = [
     "-acodec", "mp3", "-strict", "experimental",
     "-ac", "2", "-ar", "44100", "-ab", "128k",
     "-qscale:v", "6",
+    ]
+OUTPUT_FORMAT = [
+    "-f", "ogg",
+    "-vcodec", "libtheora",
+    "-qscale:v", "5",
+    #"-flags:v", "qscale", "-global_quality:v", "5*QP2LAMBDA",
+    # Max quality is "10*QP2LAMBDA".
+    "-acodec", "libvorbis",
+    "-qscale:a", "3",
+    ]
+OUTPUT_FORMAT = [
+    "-f", "webm",
+    "-vcodec", "libvpx", "-b", "614400",
+    "-acodec", "libvorbis",
     ]
 
 
@@ -932,3 +947,38 @@ class AudioProcessing():                         #{{{1
                 )
             )
         return self
+
+
+class Probe():                                   #{{{1
+    """A wrapper for ffprobe, used to gather information about a video file."""
+
+    def __init__(self, filename):
+        self.filename = filename
+        self.data = None
+
+    def get_duration(self):
+        self._probe()
+        return float(self.data['format']['duration'])
+
+    def _probe(self):
+        """Actually call ffprobe and parse json output.
+
+        This method returns immediately if the file has already been probed.
+        """
+        if self.data is not None:
+            return
+        self.process = subprocess.Popen(
+            [
+                "ffprobe", "-of", "json",
+                "-show_error",
+                "-show_format",
+                "-show_streams",
+                self.filename
+            ],
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            universal_newlines=True,
+            )
+        self.data = json.load(self.process.stdout)
+        self.process.stdout.close()

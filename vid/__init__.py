@@ -36,6 +36,7 @@ __all__ = [
     "ConcatenateShots",
     "Shot",
     "Player",
+    "Probe",
     "Multiplexer",
     "SubprocessSupervisor",
     "AudioProcessing",
