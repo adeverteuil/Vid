@@ -26,6 +26,7 @@ import select
 import shutil
 import os.path
 import logging
+import tempfile
 import unittest
 import unittest.mock
 import threading
@@ -365,12 +366,22 @@ class UtilsTestCase(unittest.TestCase):
 
         # Add filter "showdata" for Shot and Multiplexer.
         l = 2
-        shot = Shot(54).cut(0, l).add_filter("showdata")
+        shot = Shot(54).cut(3, l).add_filter("showdata")
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
         muxer.add_filter("showdata", length=l)
         player = Player(muxer.mux())
         self.assertEqual(player.process.wait(), 0)
+        
+        # Specify output format.
+        shot = Shot(54).cut(0, 1)
+        shot.demux()
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        av_stream = muxer.mux(format="ogg")
+        with tempfile.NamedTemporaryFile() as tmpf:
+            shutil.copyfileobj(av_stream, tmpf)
+            probe = Probe(tmpf.name)
+            self.assertEqual(probe.get_format(), "ogg")
 
     def test_subprocesssupervisor(self):
         logger = logging.getLogger(__name__+".test_subprocesssupervisor")
@@ -462,7 +473,10 @@ class UtilsTestCase(unittest.TestCase):
         shot.demux()
         multiplexer = Multiplexer(shot.v_stream, shot.a_stream)
         player = Player(multiplexer.mux())
-        player.process.wait()
+        self.assertEqual(player.process.wait(), 0)
+        self.assertEqual(multiplexer.process.wait(), 0)
+        self.assertEqual(shot.a_process.wait(), 0)
+        self.assertEqual(shot.v_process.wait(), 0)
 
     def test_audioprocessing_mix(self):
         logger = logging.getLogger(__name__+".test_audioprocessing_mix")

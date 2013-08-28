@@ -20,6 +20,7 @@
 #}}}
 
 
+# Imports                                        {{{1
 import os
 import io
 import re
@@ -39,6 +40,7 @@ import threading
 import subprocess
 
 
+# Global variables                               {{{1
 FASTSEEK_THRESHOLD = 30  # Seconds
 RAW_VIDEO = ["-f", "yuv4mpegpipe", "-vcodec", "rawvideo"]
 RAW_AUDIO = [
@@ -46,28 +48,35 @@ RAW_AUDIO = [
     "-ac", "2", "-ar", "44100",
     ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
-OUTPUT_FORMAT = [
-    "-f", "avi",
-    "-vcodec", "libx264",
-    "-crf", "23", "-preset", "medium",
-    "-acodec", "mp3", "-strict", "experimental",
-    "-ac", "2", "-ar", "44100", "-ab", "128k",
-    "-qscale:v", "6",
-    ]
-OUTPUT_FORMAT = [
-    "-f", "ogg",
-    "-vcodec", "libtheora",
-    "-qscale:v", "5",
-    #"-flags:v", "qscale", "-global_quality:v", "5*QP2LAMBDA",
-    # Max quality is "10*QP2LAMBDA".
-    "-acodec", "libvorbis",
-    "-qscale:a", "3",
-    ]
-OUTPUT_FORMAT = [
-    "-f", "webm",
-    "-vcodec", "libvpx", "-b", "614400",
-    "-acodec", "libvorbis",
-    ]
+OUTPUT_FORMAT = {
+    'avi': [
+        "-f", "avi",
+        "-vcodec", "libx264",
+        "-crf", "23", "-preset", "medium",
+        "-acodec", "mp3", "-strict", "experimental",
+        "-ac", "2", "-ar", "44100", "-ab", "128k",
+        "-qscale:v", "6",
+        ],
+    # ogg and webm format from http://diveintohtml5.info/video.html.
+    'ogg': [
+        "-f", "ogg",
+        "-vcodec", "libtheora",
+        "-qscale:v", "5",
+        # Max quality is 10.
+        "-acodec", "libvorbis",
+        "-qscale:a", "3",
+        ],
+    'webm': [
+        "-f", "webm",
+        "-vcodec", "libvpx", "-b", "614400",
+        "-acodec", "libvorbis",
+        ],
+    # Low latency, high bandwidth for local pipe.
+    'pipe': [
+        "-f", "matroska",
+        "-codec", "copy",
+        ],
+    }
 
 
 logger = logging.getLogger(__name__)
@@ -77,6 +86,7 @@ logdir = os.getcwd() + "/log"
 @atexit.register
 def cleanup():
     logging.shutdown()
+#}}}
 
 
 def _redirect_stderr_to_log_file():              #{{{1
@@ -102,6 +112,7 @@ def _redirect_stderr_to_log_file():              #{{{1
             continue
     sys.stderr.write(ls)
     sys.stderr.write("\n-- start stderr stream -- \n\n")
+#}}}
 
 
 class RemoveHeader(threading.Thread):            #{{{1
@@ -542,7 +553,7 @@ class FFmpegWrapper():                           #{{{1
         return self
 
 
-class Shot(FFmpegWrapper):                                    #{{{1
+class Shot(FFmpegWrapper):                       #{{{1
     """Abstraction for a movie file copied from the camcorder.
 
     The constructor takes an integer as a parameter and finds the
@@ -821,7 +832,7 @@ class Player():                                  #{{{1
             file.close()
             self.logger.debug("Closed file object {}.".format(file))
 
-class Multiplexer(FFmpegWrapper):                             #{{{1
+class Multiplexer(FFmpegWrapper):                #{{{1
     """Multiplex video and audio stream in a container format."""
 
     def __init__(self, v_stream, a_stream):
@@ -830,15 +841,19 @@ class Multiplexer(FFmpegWrapper):                             #{{{1
         self.a_fd = self._get_fileno(a_stream)
         super().__init__()
 
-    def mux(self):
+    def mux(self, format=OUTPUT_FORMAT['pipe']):
         self.logger.debug("Muxing video {} and audio {}.".format(
             self.v_fd, self.a_fd))
+        if isinstance(format, str):
+            format = OUTPUT_FORMAT[format]
+        else:
+            assert isinstance(format, list)
         args = [
             "ffmpeg", "-loglevel", "debug", "-y",
             ] + RAW_VIDEO + ["-i", "pipe:{}".format(self.v_fd),
             ] + RAW_AUDIO + ["-i", "pipe:{}".format(self.a_fd),
             ] + self._format_filters() + [
-            ] + OUTPUT_FORMAT + ["pipe:1",
+            ] + format + ["pipe:1",
             ]
         self.process = subprocess.Popen(
             args,
@@ -959,6 +974,10 @@ class Probe():                                   #{{{1
     def get_duration(self):
         self._probe()
         return float(self.data['format']['duration'])
+
+    def get_format(self):
+        self._probe()
+        return self.data['format']['format_name']
 
     def _probe(self):
         """Actually call ffprobe and parse json output.
