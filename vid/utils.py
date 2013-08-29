@@ -48,6 +48,8 @@ RAW_AUDIO = [
     "-ac", "2", "-ar", "44100",
     ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
+# Set the default font for drawtext filter.
+FONTFILE = "/usr/share/fonts/TTF/ttf-inconsolata.otf"
 OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
     'avi': [
         "-f", "avi",
@@ -550,6 +552,15 @@ class FFmpegWrapper():                           #{{{1
         self.logger.debug(
             "Adding filter {} with options {}.".format(filtername, kwargs)
             )
+        if filtername == "drawtext":
+            defaults = {
+                'fontfile': FONTFILE,
+                'fontcolor': "white",
+                'fontsize': "25",
+                'boxcolor': "0x000000aa",
+                }
+            defaults.update(kwargs)
+            kwargs = defaults
         self.filters.append((filtername, kwargs))
         return self
 
@@ -591,6 +602,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                 ) from err
         except :
             self.logger.exception("That's a new exception?!")
+        self._probe = Probe(self.name)
 
     def __repr__(self):
         return "<Shot({}), seek={}, dur={}>".format(
@@ -599,9 +611,8 @@ class Shot(FFmpegWrapper):                       #{{{1
             self.dur,
             )
 
-    def _probe(self):
-        #TODO use ffprobe to gather information about the file.
-        pass
+    def get_duration(self):
+        return self._probe.get_duration()
 
     def demux(self, video=True, audio=True, remove_header=False):
         """Return readable video and audio streams.
@@ -772,16 +783,23 @@ class Shot(FFmpegWrapper):                       #{{{1
             "Adding filter {} with options {}.".format(filtername, kwargs)
             )
         if filtername == "showdata":
-            super().add_filter(
+            # Add a gliding cursor which indicates the current position
+            # along the bottom of the frame.
+            self.add_filter(
+                "drawtext",
+                x="t/{length}*w".format(length=self.get_duration()),
+                y="h-text_h",
+                text=">",
+                fontsize="10",
+                shadowcolor="black",
+                shadowx="2",
+                )
+            self.add_filter(
                 "drawtext",
                 text="%{{pts}}    %{{n}}\n{}".format(self.name),
                 y="h-text_h-20",
                 x="30",
-                fontcolor="white",
-                fontsize="25",
-                fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
                 box="1",
-                boxcolor="0x000000aa",
                 )
         else:
             super().add_filter(filtername, **kwargs)
@@ -938,6 +956,16 @@ class Multiplexer(FFmpegWrapper):                #{{{1
             # Print timecode and, if length is provided, length.
             try:
                 t = "/{:.6f}".format(kwargs['length'])
+                # Add a gliding cursor which indicates the current position
+                # along the top of the frame.
+                self.add_filter(
+                    "drawtext",
+                    x="t/{length}*w".format(length=kwargs['length']),
+                    text=">",
+                    fontsize="10",
+                    shadowcolor="black",
+                    shadowx="2",
+                    )
                 del kwargs['length']
             except KeyError:
                 t = ""
@@ -946,11 +974,7 @@ class Multiplexer(FFmpegWrapper):                #{{{1
                 text="%{{pts}}{}".format(t),
                 y="20",
                 x="w-text_w-20",
-                fontcolor="white",
-                fontsize="25",
-                fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
                 box="1",
-                boxcolor="0x000000aa",
                 )
         else:
             super().add_filter(filtername, **kwargs)
