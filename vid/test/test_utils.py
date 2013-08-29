@@ -245,15 +245,15 @@ class UtilsTestCase(unittest.TestCase):
         self.assertEqual(shot.seek, 5)
         self.assertEqual(shot.dur, None)
 
-        shot.cut(5, 6)
+        shot.cut(5, 4)
         self.assertEqual(shot.seek, 5)
-        self.assertEqual(shot.dur, 6)
+        self.assertEqual(shot.dur, 4)
 
         shot.cut()
         self.assertEqual(shot.seek, 0)
         self.assertEqual(shot.dur, None)
 
-        shot.cut(45)
+        self.assertWarns(RuntimeWarning, shot.cut, 45)
         self.assertEqual(shot.seek, 45)
         self.assertEqual(shot.dur, None)
 
@@ -324,6 +324,16 @@ class UtilsTestCase(unittest.TestCase):
             )
         shot.v_stream.close()
         p.wait()
+
+        # test get_duration() method.
+        shot = Shot(54)
+        self.assertGreater(shot.get_duration(), 9)
+        self.assertLess(shot.get_duration(), 10)
+        self.assertWarns(RuntimeWarning, shot.cut, 100)
+        self.assertEqual(shot.get_duration(), 0)
+        shot.cut(0, 1)
+        self.assertGreater(shot.get_duration(), 0.9)
+        self.assertLess(shot.get_duration(), 1.1)
 
     def test_player(self):
         logger = logging.getLogger(__name__+".test_player")

@@ -36,6 +36,7 @@ import select
 import atexit
 import os.path
 import logging
+import warnings
 import threading
 import subprocess
 
@@ -612,7 +613,16 @@ class Shot(FFmpegWrapper):                       #{{{1
             )
 
     def get_duration(self):
-        return self._probe.get_duration()
+        """Calculate and return the duration of the cut."""
+        filelength = self._probe.get_duration()
+        starttime = self.seek
+        endtime = filelength if self.dur is None else self.seek + self.dur
+        if endtime > filelength:
+            # Make sure user didn't attempt a cut that exceeds the file length.
+            # Allow it but return the actual length obtained.
+            endtime = filelength
+        duration = endtime - starttime
+        return duration if duration > 0 else 0
 
     def demux(self, video=True, audio=True, remove_header=False):
         """Return readable video and audio streams.
@@ -769,6 +779,16 @@ class Shot(FFmpegWrapper):                       #{{{1
             assert isinstance(seek, (int, float))
         self.seek = seek
         self.dur = dur
+
+        # Validate end time against length of file.
+        endtime = seek + (dur if dur is not None else 0)
+        if endtime >= self._probe.get_duration():
+            warnings.warn(
+                "Endtime of {} exceeds {}'s length of {}.".format(
+                    endtime, self, self._probe.get_duration()
+                    ),
+                RuntimeWarning,
+                )
         return self
         # This allows instantiation and cutting at once :
         # Shot(<number>).cut(seek, dur)
@@ -787,7 +807,7 @@ class Shot(FFmpegWrapper):                       #{{{1
             # along the bottom of the frame.
             self.add_filter(
                 "drawtext",
-                x="t/{length}*w".format(length=self.get_duration()),
+                x="t/{length}*w".format(length=self._probe.get_duration()),
                 y="h-text_h",
                 text=">",
                 fontsize="10",
