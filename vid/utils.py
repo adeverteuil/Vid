@@ -893,9 +893,10 @@ class Multiplexer(FFmpegWrapper):                #{{{1
         for file in files:
             assert isinstance(file, str)
             ext = file.rsplit('.', 1)[-1]
+            outputs += self._format_filters()
             outputs += OUTPUT_FORMATS[ext]
             outputs.append(file)
-        args = self._args + self._format_filters() + outputs
+        args = self._args + outputs
         self.process = subprocess.Popen(
             args,
             stdin=subprocess.DEVNULL,
