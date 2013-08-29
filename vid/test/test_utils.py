@@ -372,16 +372,29 @@ class UtilsTestCase(unittest.TestCase):
         muxer.add_filter("showdata", length=l)
         player = Player(muxer.mux())
         self.assertEqual(player.process.wait(), 0)
-        
+
         # Specify output format.
         shot = Shot(54).cut(0, 1)
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
-        av_stream = muxer.mux(format="ogg")
+        av_stream = muxer.mux(format="ogv")
         with tempfile.NamedTemporaryFile() as tmpf:
             shutil.copyfileobj(av_stream, tmpf)
             probe = Probe(tmpf.name)
             self.assertEqual(probe.get_format(), "ogg")
+
+        # Write to files.
+        shot = Shot(54).cut(0, 1)
+        shot.demux()
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        muxer.add_filter("showdata")
+        with tempfile.TemporaryDirectory() as tmpd:
+            file1 = os.path.join(tmpd, "test.ogv")
+            file2 = os.path.join(tmpd, "test.webm")
+            muxer.write_to_files(file1, file2)
+            muxer.process.wait()
+            self.assertEqual(Probe(file1).get_format(), "ogg")
+            self.assertEqual(Probe(file2).get_format(), "matroska,webm")
 
     def test_subprocesssupervisor(self):
         logger = logging.getLogger(__name__+".test_subprocesssupervisor")

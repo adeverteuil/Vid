@@ -48,7 +48,7 @@ RAW_AUDIO = [
     "-ac", "2", "-ar", "44100",
     ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
-OUTPUT_FORMAT = {
+OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
     'avi': [
         "-f", "avi",
         "-vcodec", "libx264",
@@ -58,7 +58,7 @@ OUTPUT_FORMAT = {
         "-qscale:v", "6",
         ],
     # ogg and webm format from http://diveintohtml5.info/video.html.
-    'ogg': [
+    'ogv': [
         "-f", "ogg",
         "-vcodec", "libtheora",
         "-qscale:v", "5",
@@ -74,7 +74,8 @@ OUTPUT_FORMAT = {
     # Low latency, high bandwidth for local pipe.
     'pipe': [
         "-f", "matroska",
-        "-codec", "copy",
+        "-vcodec", "rawvideo", # I don't use "copy" because filters may apply.
+        "-acodec", "pcm_s16le", "-ac", "2", "-ar", "44100",
         ],
     }
 
@@ -839,22 +840,21 @@ class Multiplexer(FFmpegWrapper):                #{{{1
         self.logger = logging.getLogger(__name__+".Multiplexer")
         self.v_fd = self._get_fileno(v_stream)
         self.a_fd = self._get_fileno(a_stream)
-        super().__init__()
-
-    def mux(self, format=OUTPUT_FORMAT['pipe']):
-        self.logger.debug("Muxing video {} and audio {}.".format(
-            self.v_fd, self.a_fd))
-        if isinstance(format, str):
-            format = OUTPUT_FORMAT[format]
-        else:
-            assert isinstance(format, list)
-        args = [
+        self._args = [
             "ffmpeg", "-loglevel", "debug", "-y",
             ] + RAW_VIDEO + ["-i", "pipe:{}".format(self.v_fd),
             ] + RAW_AUDIO + ["-i", "pipe:{}".format(self.a_fd),
-            ] + self._format_filters() + [
-            ] + format + ["pipe:1",
             ]
+        super().__init__()
+
+    def mux(self, format=OUTPUT_FORMATS['pipe']):
+        self.logger.debug("Muxing video {} and audio {}.".format(
+            self.v_fd, self.a_fd))
+        if isinstance(format, str):
+            format = OUTPUT_FORMATS[format]
+        else:
+            assert isinstance(format, list)
+        args = self._args + self._format_filters() + format + ["pipe:1"]
         self.process = subprocess.Popen(
             args,
             stdin=subprocess.DEVNULL,
@@ -878,6 +878,45 @@ class Multiplexer(FFmpegWrapper):                #{{{1
                 )
             )
         return self.process.stdout
+
+    def write_to_files(self, *files):
+        """Multiplex streams and write to files.
+
+        Each file extension will be used as a key to the OUTPUT_FORMATS
+        dictionary.
+        """
+        self.logger.debug("Muxing video {} and audio {} to files {}.".format(
+            self.v_fd, self.a_fd, files
+            ))
+        assert files
+        outputs = []
+        for file in files:
+            assert isinstance(file, str)
+            ext = file.rsplit('.', 1)[-1]
+            outputs += OUTPUT_FORMATS[ext]
+            outputs.append(file)
+        args = self._args + self._format_filters() + outputs
+        self.process = subprocess.Popen(
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            pass_fds=(self.v_fd, self.a_fd),
+            preexec_fn=_redirect_stderr_to_log_file,
+            )
+        self.logger.debug(
+            SUBPROCESS_LOG.format(
+                self.process.pid, args
+                )
+            )
+        os.close(self.v_fd)
+        os.close(self.a_fd)
+        self.logger.debug(
+            "Closed fd {} and {} after spawning subprocess.".format(
+                self.v_fd, self.a_fd
+                )
+            )
+        return
 
     @staticmethod
     def _get_fileno(file):
