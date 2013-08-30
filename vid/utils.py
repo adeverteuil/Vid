@@ -922,6 +922,10 @@ class Multiplexer(FFmpegWrapper):                #{{{1
 
         Each file extension will be used as a key to the OUTPUT_FORMATS
         dictionary.
+
+        Files may also be a tuple of (filename, formatlist) where
+        filename is a string and formatlist is a list of arguments passed to
+        ffmpeg describing the output format for that specific file.
         """
         self.logger.debug("Muxing video {} and audio {} to files {}.".format(
             self.v_fd, self.a_fd, files
@@ -929,11 +933,16 @@ class Multiplexer(FFmpegWrapper):                #{{{1
         assert files
         outputs = []
         for file in files:
-            assert isinstance(file, str)
-            ext = file.rsplit('.', 1)[-1]
-            outputs += self._format_filters()
-            outputs += OUTPUT_FORMATS[ext]
-            outputs.append(file)
+            if isinstance(file, tuple):
+                outputs += self._format_filters()
+                outputs += file[1]
+                outputs.append(file[0])
+            else:
+                assert isinstance(file, str)
+                ext = file.rsplit('.', 1)[-1]
+                outputs += self._format_filters()
+                outputs += OUTPUT_FORMATS[ext]
+                outputs.append(file)
         args = self._args + outputs
         self.process = subprocess.Popen(
             args,

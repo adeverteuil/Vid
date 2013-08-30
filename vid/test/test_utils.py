@@ -406,6 +406,20 @@ class UtilsTestCase(unittest.TestCase):
             self.assertEqual(Probe(file1).get_format(), "ogg")
             self.assertEqual(Probe(file2).get_format(), "matroska,webm")
 
+        # Write to files with specified format.
+        shot = Shot(54).cut(0, 1)
+        shot.demux()
+        formatlist = [
+            "-f", "matroska",
+            "-acodec", "libvorbis",
+            "-vcodec", "libtheora",
+            ]
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        with tempfile.NamedTemporaryFile() as tmpf:
+            muxer.write_to_files((tmpf.name, formatlist))
+            self.assertEqual(muxer.process.wait(), 0)
+            self.assertEqual(Probe(tmpf.name).get_format(), "matroska,webm")
+
     def test_subprocesssupervisor(self):
         logger = logging.getLogger(__name__+".test_subprocesssupervisor")
         logger.debug("Testing SubprocessSupervisor.")
