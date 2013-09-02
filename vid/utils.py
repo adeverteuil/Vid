@@ -533,13 +533,11 @@ class FFmpegWrapper():                           #{{{1
                 for k, v in args.items():
                     # Convert numbers to string.
                     v = str(v)
-                    # Third level of escaping.
-                    v = re.sub("([][,;])", r"\\\1", v)
-                    # Second level of escaping for filtergraph description string.
-                    v = v.replace("\\", "\\\\").replace("'", "'\\\\\\''")
-                    # First level of escaping for the filter arguments.
-                    v = v.replace(":", "\\:")
-                    # Quoting.
+                    # 1st level of escaping : filter arguments.
+                    v = re.sub(r"([\:'])", r"\\\1", v)
+                    # 2nd level of escaping : filtergraph string.
+                    # Quote string. Unquote and escape quotes.
+                    v = v.replace("\\'", "'\\\\\\''")
                     v = "'{}'".format(v)
                     arglist.append("=".join((k, v)))
                 string = "=".join([name, ":".join(arglist)])
