@@ -14,4 +14,5 @@ setup(
     packages=["vid", "vid.test"],
     license="GPLv3",
     package_data={'vid.test': ["A roll/testsequence/*"]},
+    scripts=["scripts/vid"],
     )

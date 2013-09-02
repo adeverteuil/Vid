@@ -1,0 +1,69 @@
+#!/usr/bin/python3
+# vim:cc=80:fdm=marker:fdl=0:fdc=1
+#
+# vid
+# Copyright © 2013  Alexandre de Verteuil        {{{1
+#
+# This file is part of Vid.
+#
+# Vid is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# Vid is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#}}}
+
+
+# Imports                                        {{{1
+import vid
+import sys
+import logging
+import argparse
+
+
+# Global variables                               {{{1
+#}}}
+
+
+def main():                                      #{{{1
+    # Parse command line arguments.
+    args = _parse_args()
+    # Execute function defined by subcommand argument.
+    args.func(args)
+
+
+def _parse_args(args=None):                      #{{{1
+    """Build argument parsers and parse arguments.
+    
+    If args list is provided, use it. Otherwise, parse sys.argv[1:].
+    """
+    # Create the top-level parser.
+    parser = argparse.ArgumentParser(
+        description="A CLI video editor.",
+        )
+    subparsers = parser.add_subparsers()
+
+    # Create the parser for the "play" command.
+    parser_play = subparsers.add_parser("play")
+    parser_play.add_argument("file_number", type=int)
+    parser_play.set_defaults(func=play)
+
+    # Parse argument list, return gathered Namespace object.
+    return parser.parse_args(args if args is not None else sys.argv[1:])
+
+
+def play(args):                                  #{{{1
+    """Play the requested file using inv.utils objects."""
+    print("play file", args.file_number)
+#}}}
+
+
+if __name__ == "__main__":
+    main()
