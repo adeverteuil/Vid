@@ -22,28 +22,24 @@
 
 
 # Imports                                        {{{1
-import vid
 import sys
 import logging
 import argparse
+
+
+from vid import *
 
 
 # Global variables                               {{{1
 #}}}
 
 
-def main():                                      #{{{1
-    # Parse command line arguments.
-    args = _parse_args()
-    # Execute function defined by subcommand argument.
-    args.func(args)
-
-
 def _parse_args(args=None):                      #{{{1
     """Build argument parsers and parse arguments.
-    
+
     If args list is provided, use it. Otherwise, parse sys.argv[1:].
     """
+    args = args if args is not None else sys.argv[1:]
     # Create the top-level parser.
     parser = argparse.ArgumentParser(
         description="A CLI video editor.",
@@ -52,18 +48,59 @@ def _parse_args(args=None):                      #{{{1
 
     # Create the parser for the "play" command.
     parser_play = subparsers.add_parser("play")
-    parser_play.add_argument("file_number", type=int)
     parser_play.set_defaults(func=play)
+    parser_play.add_argument("file_number", type=int)
+    parser_play.add_argument("seek", type=float, nargs="?", default=0)
+    parser_play.add_argument("duration", type=float, nargs="?", default=None)
+    parser_play.add_argument("--output", "-o")
 
     # Parse argument list, return gathered Namespace object.
-    return parser.parse_args(args if args is not None else sys.argv[1:])
+    parsed_args =  parser.parse_args(args)
+    if 'func' not in parsed_args:
+        parser.error("Subcommand missing.")
+    return parsed_args
 
 
 def play(args):                                  #{{{1
     """Play the requested file using inv.utils objects."""
-    print("play file", args.file_number)
+    logger = logging.getLogger(__name__+".play")
+    print("Play file number", args.file_number)
+    print("Start at", args.seek, end=" ")
+    if args.duration:
+        print("for", args.duration, "seconds.")
+    else:
+        print("until EOF.")
+    try:
+        shot = Shot(args.file_number).cut(args.seek, args.duration)
+        shot.add_filter("showdata")
+        shot.demux()
+        muxer = Multiplexer(shot.v_stream, shot.a_stream)
+        muxer.add_filter("showdata", length=shot.get_duration())
+        if args.output:
+            print("Writing to", args.output)
+            try:
+                muxer.write_to_files(args.output)
+            except KeyError:
+                logger.error(
+                    "Invalid file extension. Please choose among {}.".format(
+                        ", ".join(OUTPUT_FORMATS.keys())
+                        )
+                    )
+                return
+        else:
+            player = Player(muxer.mux())
+            player.process.wait()
+        muxer.process.wait()
+        shot.a_process.wait()
+        shot.v_process.wait()
+    except FileNotFoundError:
+        logger.error("Couldn't find file number {}.".format(args.file_number))
 #}}}
 
 
 if __name__ == "__main__":
-    main()
+    # Main loop
+    # Parse command line arguments.
+    args = _parse_args()
+    # Execute function defined by subcommand argument.
+    args.func(args)

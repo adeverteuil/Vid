@@ -862,7 +862,8 @@ class Player():                                  #{{{1
                 self.process.pid, args
                 )
             )
-        if isinstance(file, int):
+        if isinstance(file, int) and file > 0:
+            # Check file > 0 because subprocess.DEVNULL == -3.
             os.close(file)
             self.logger.debug("Closed fd {}.".format(file))
         elif isinstance(file, io.IOBase):

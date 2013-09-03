@@ -31,6 +31,7 @@ from .utils import *
 __all__ = [
     "RAW_AUDIO",
     "RAW_VIDEO",
+    "OUTPUT_FORMATS",
     "RemoveHeader",
     "ConcatenateStreams",
     "ConcatenateShots",
