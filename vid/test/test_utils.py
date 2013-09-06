@@ -375,11 +375,25 @@ class UtilsTestCase(unittest.TestCase):
         self.assertEqual(player.process.wait(), 0)
 
         # Add filter "showdata" for Shot and Multiplexer.
+        # Add filter "movingtext" for Shot and Multiplexer.
         l = 2
         shot = Shot(54).cut(3, l).add_filter("showdata")
+        shot.add_filter(
+            "movingtext",
+            text="MOVING TEXT",
+            t1=3,
+            t2=3+l,
+            )
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
         muxer.add_filter("showdata", length=l)
+        muxer.add_filter(
+            "movingtext",
+            t2=l,
+            x2="w-text_w",
+            fontcolor="black",
+            text="MOVING\nTEXT",
+            )
         player = Player(muxer.mux())
         self.assertEqual(player.process.wait(), 0)
 

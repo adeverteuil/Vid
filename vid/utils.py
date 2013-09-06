@@ -551,6 +551,30 @@ class FFmpegWrapper():                           #{{{1
         self.logger.debug(
             "Adding filter {} with options {}.".format(filtername, kwargs)
             )
+        if filtername == "movingtext":
+            # By default, text crosses the frame from bottom to top
+            # From timestamp 0 to 3 seconds.
+            x1 = kwargs.pop('x1', 20)
+            y1 = kwargs.pop('y1', "h")
+            x2 = kwargs.pop('x2', 20)
+            y2 = kwargs.pop('y2', "-text_h")
+            t1 = kwargs.pop('t1', 0)
+            t2 = kwargs.pop('t2', 3)
+            # The two-point form of the linear equation :
+            # http://en.wikipedia.org/wiki/Linear_equation#Two-point_form
+            # y - y1 = (y2 - y1) / (x2 - x1) * (x - x1)
+            defaults = {
+                'x': "({x2}-{x1})/({t2}-{t1})*(t-{t1})+{x1}".format(
+                    x1=x1, x2=x2, y1=y1, y2=y2, t1=t1, t2=t2,
+                    ),
+                'y': "({y2}-{y1})/({t2}-{t1})*(t-{t1})+{y1}".format(
+                    x1=x1, x2=x2, y1=y1, y2=y2, t1=t1, t2=t2,
+                    ),
+                'text': "undefined text",
+                }
+            defaults.update(kwargs)
+            kwargs = defaults
+            filtername = "drawtext"
         if filtername == "drawtext":
             defaults = {
                 'fontfile': FONTFILE,
