@@ -598,16 +598,9 @@ class Shot(FFmpegWrapper):                       #{{{1
 
     This is the simplest building block for a movie.
     """
-    def __init__(self, number):
+    def __init__(self, number, seek=0, dur=None, filters=None, silent=False):
         self.logger = logging.getLogger(__name__+".Shot")
         self.number = int(number)
-        self.seek = 0
-        self.dur = None
-        self.process = None
-        self.v_stream = None
-        self.a_stream = None
-        self.silent = False
-        self.filters = [("yadif", {})]  # Always deinterlace.
         pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
             folder="A roll",
             prefix="M2U",
@@ -625,6 +618,16 @@ class Shot(FFmpegWrapper):                       #{{{1
                 ) from err
         except :
             self.logger.exception("That's a new exception?!")
+        self.seek = seek
+        self.dur = dur
+        self.process = None
+        self.v_stream = None
+        self.a_stream = None
+        self.silent = silent
+        self.filters = [("yadif", {})]  # Always deinterlace.
+        if filters is not None:
+            for filter in filters:
+                self.add_filter(filter[0], **filter[1])
         self._probe = Probe(self.name)
 
     def __repr__(self):

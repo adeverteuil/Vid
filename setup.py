@@ -11,8 +11,12 @@ setup(
     author="Alexandre de Verteuil",
     author_email="alexandre.deverteuil@gmail.com",
     url="http://alexandre.deverteuil.net/",
-    packages=["vid", "vid.test"],
     license="GPLv3",
+    requires=["yaml"],
+    packages=["vid", "vid.test"],
     package_data={'vid.test': ["A roll/testsequence/*"]},
     scripts=["scripts/vid"],
+    data_files=[
+        ('/usr/share/vid', ['data_files/template.yaml']),
+        ]
     )

@@ -22,10 +22,13 @@
 
 
 # Imports                                        {{{1
+import os
 import sys
+import queue
 import logging
 import argparse
 
+import yaml
 
 from vid import *
 
@@ -53,6 +56,12 @@ def _parse_args(args=None):                      #{{{1
     parser_play.add_argument("seek", type=float, nargs="?", default=0)
     parser_play.add_argument("duration", type=float, nargs="?", default=None)
     parser_play.add_argument("--output", "-o")
+
+    # Create the parser for the "yaml" command.
+    parser_yaml = subparsers.add_parser("yaml")
+    parser_yaml.set_defaults(func=play_yaml)
+    parser_yaml.add_argument("file_name", type=str)
+    parser_yaml.add_argument("-s", "--showinfo", action="store_true")
 
     # Parse argument list, return gathered Namespace object.
     parsed_args =  parser.parse_args(args)
@@ -95,6 +104,55 @@ def play(args):                                  #{{{1
         shot.v_process.wait()
     except FileNotFoundError:
         logger.error("Couldn't find file number {}.".format(args.file_number))
+
+
+def play_yaml(options):
+    """Interpret YAML and play the result."""
+    logger = logging.getLogger(__name__+".play_yaml")
+    print("Play", options.file_name)
+    try:
+        # Create pipe to connect ConcatenateShots object with Multiplexer.
+        # Closing the file descriptors is taken care of by these objects.
+        fvr, fvw = os.pipe()
+        vr = open(fvr, "rb")
+        vw = open(fvw, "wb")
+        far, faw = os.pipe()
+        ar = open(far, "rb")
+        aw = open(faw, "wb")
+        q = queue.Queue()
+        cat = ConcatenateShots(q, vw, aw)
+        # mixer = AudioProcessing(ar)
+        # mixer.mix("musique/foo.mp3")
+        # Then use mixer.output_audio instead of ar.
+        muxer = Multiplexer(vr, ar)
+        cat.start()
+        # Read YAML
+        with open(options.file_name) as yaml_file:
+            data = yaml.load(yaml_file)
+        length = 0
+        # Interpret YAML data, build the movie.
+        for argslist in data['movie']:
+            args = []
+            kwargs = {}
+            for arg in argslist:
+                if isinstance(arg, dict):
+                    kwargs = arg
+                    break
+                args.append(arg)
+            print("args =", args)
+            print("kwargs =", kwargs)
+            shot = Shot(*args, **kwargs)
+            print(shot)
+            q.put(shot)
+            length += shot.get_duration()
+        print("finished reading YAML")
+        q.put(None)
+        if options.showinfo:
+            muxer.add_filter("showdata", length=length)
+        player = Player(muxer.mux())
+        player.process.wait()
+    finally:
+        pass
 #}}}
 
 
