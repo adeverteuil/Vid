@@ -49,25 +49,57 @@ def _parse_args(args=None):                      #{{{1
     parser = argparse.ArgumentParser(
         description="A CLI video editor.",
         )
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(help="vid expects a sub-command")
 
     # Create the parser for the "play" command.
-    parser_play = subparsers.add_parser("play")
+    parser_play = subparsers.add_parser("play",
+        help="Find a file by it's number and play it",
+        )
     parser_play.set_defaults(func=play)
-    parser_play.add_argument("file_number", type=int)
-    parser_play.add_argument("seek", type=float, nargs="?", default=0)
-    parser_play.add_argument("duration", type=float, nargs="?", default=None)
-    parser_play.add_argument("--output", "-o")
+    parser_play.add_argument("file_number",
+        type=int,
+        help="The number of the media file to read",
+        )
+    parser_play.add_argument("seek",
+        type=float, nargs="?", default=0,
+        help="The timecode to seek to",
+        )
+    parser_play.add_argument("duration",
+        type=float, nargs="?", default=None,
+        help="The duration for which to play for",
+        )
+    parser_play.add_argument("-o", "--output",
+        help=("The file name to which to save the preview; "
+              "the file extension specifies the container format"),
+            )
 
     # Create the parser for the "yaml" command.
-    parser_yaml = subparsers.add_parser("yaml")
+    parser_yaml = subparsers.add_parser("yaml",
+        help="Read YAML file, play or write a video file",
+        )
     parser_yaml.set_defaults(func=play_yaml)
-    parser_yaml.add_argument("file_name", type=str)
-    parser_yaml.add_argument("-s", "--showinfo", action="store_true")
-    parser_yaml.add_argument("--output", "-o", action="append")
-    parser_yaml.add_argument("--bell", "-b", action="store_true")
+    parser_yaml.add_argument("file_name",
+        type=str, help="The YAML file to read",
+        )
+    parser_yaml.add_argument("-s", "--showinfo",
+        action="store_true",
+        help="Burn filenames and timecode information on the video",
+        )
+    parser_yaml.add_argument("-o", "--output",
+        action="append",
+        help=("If one or more output option is given, write video "
+              "to the given filename, encoded in the formats derived "
+              "from the filenames extensions"),
+        )
+    parser_yaml.add_argument("-b", "--bell",
+        action="store_true",
+        help="Produce a beep when encoding is finished",
+        )
 
-    parser_new = subparsers.add_parser("new")
+    # Create the subparser for the "new" command.
+    parser_new = subparsers.add_parser("new",
+        help="Write a template YAML file with helpful comments to stdout",
+        )
     parser_new.set_defaults(func=new_movie)
 
     # Parse argument list, return gathered Namespace object.
