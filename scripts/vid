@@ -118,8 +118,7 @@ def play_yaml(options):                          #{{{1
     logger = logging.getLogger(__name__+".play_yaml")
     print("Play", options.file_name)
     # Read YAML
-    with open(options.file_name) as yaml_file:
-        data = yaml.load(yaml_file)
+    data = YAMLReader().load(options.file_name)
     # Create pipe to connect ConcatenateShots object with Multiplexer.
     # Closing the file descriptors is taken care of by these objects.
     fvr, fvw = os.pipe()

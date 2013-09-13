@@ -127,6 +127,7 @@ class YAMLReader():                              #{{{1
 
         # All checks passed, set self.data.
         self.data = sane_data
+        return self.data
 
     def _check_root(self, data):
         if not isinstance(data, dict):
@@ -193,14 +194,17 @@ class YAMLReader():                              #{{{1
                 if 'filters' in kwargs:
                     filters = []
                     for f in kwargs['filters']:
-                        filters.append(_check_filter(f, ["movie", index]))
-                kwargs.update({'filters': filters})
+                        filters.append(
+                            self._check_filter(f, ["movie", str(index)])
+                            )
+                    kwargs.update({'filters': filters})
             else:
                 kwargs = {}
             if 1 > len(shot) > 3:
                 reason = "Shot specification must provide 1 to 3 integers."
                 raise ValueError(error_msg.format(index, reason))
-            shots.append([shot] + [kwargs])
+            shot.append(kwargs)
+            shots.append(shot)
         return shots
 
     def _check_multiplexer(self, data):
@@ -212,8 +216,10 @@ class YAMLReader():                              #{{{1
             if not isinstance(data['filters'], list):
                 raise ValueError("Multiplexer filters must be a list.")
             sane_filters = []
-            for filter in filters:
-                sane_filters.append(_check_filter(filter, ["multiplexer"]))
+            for filter in data['filters']:
+                sane_filters.append(
+                    self._check_filter(filter, ["multiplexer"])
+                    )
             data['filters'] = sane_filters
         return data
 
@@ -237,7 +243,7 @@ class YAMLReader():                              #{{{1
                 raise ValueError("Global filters must be a list.")
             sane_filters = []
             for filter in filters:
-                sane_filters.append(_check_filter(filter, ["globals"]))
+                sane_filters.append(self._check_filter(filter, ["globals"]))
             data['filters'] = sane_filters
         return data
 
@@ -262,12 +268,12 @@ class YAMLReader():                              #{{{1
         """
         error_msg = (
             "Invalid filter: {}\n"
-            "Specified in {}.\n{{}}".format(data, _format_where(where))
+            "Specified in {}.\n{{}}".format(data, self._format_where(where))
             )
         if isinstance(data, str):
             # Data is simply a filter name.
             return [data, {}]
-        if not isinstance(data, list) or len(list) > 2:
+        if not isinstance(data, list) or len(data) > 2:
             reason = "Filter is not a list of maximum 2 items."
             raise ValueError(error_msg.format(reason))
         filtername = data[0]
@@ -293,5 +299,5 @@ class YAMLReader():                              #{{{1
                     raise ValueError(reason_msg.format(reason))
         return [filtername, filterargs]
 
-    def _format_where(where):
+    def _format_where(self, where):
         return " > ".join(where)
