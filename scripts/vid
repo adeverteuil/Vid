@@ -24,9 +24,11 @@
 # Imports                                        {{{1
 import os
 import sys
+import time
 import queue
 import logging
 import argparse
+import subprocess
 
 import yaml
 
@@ -62,6 +64,8 @@ def _parse_args(args=None):                      #{{{1
     parser_yaml.set_defaults(func=play_yaml)
     parser_yaml.add_argument("file_name", type=str)
     parser_yaml.add_argument("-s", "--showinfo", action="store_true")
+    parser_yaml.add_argument("--output", "-o", action="append")
+    parser_yaml.add_argument("--bell", "-b", action="store_true")
 
     # Parse argument list, return gathered Namespace object.
     parsed_args =  parser.parse_args(args)
@@ -106,53 +110,83 @@ def play(args):                                  #{{{1
         logger.error("Couldn't find file number {}.".format(args.file_number))
 
 
-def play_yaml(options):
+def play_yaml(options):                          #{{{1
     """Interpret YAML and play the result."""
     logger = logging.getLogger(__name__+".play_yaml")
     print("Play", options.file_name)
-    try:
-        # Create pipe to connect ConcatenateShots object with Multiplexer.
-        # Closing the file descriptors is taken care of by these objects.
-        fvr, fvw = os.pipe()
-        vr = open(fvr, "rb")
-        vw = open(fvw, "wb")
-        far, faw = os.pipe()
-        ar = open(far, "rb")
-        aw = open(faw, "wb")
-        q = queue.Queue()
-        cat = ConcatenateShots(q, vw, aw)
-        # mixer = AudioProcessing(ar)
-        # mixer.mix("musique/foo.mp3")
-        # Then use mixer.output_audio instead of ar.
-        muxer = Multiplexer(vr, ar)
-        cat.start()
-        # Read YAML
-        with open(options.file_name) as yaml_file:
-            data = yaml.load(yaml_file)
-        length = 0
-        # Interpret YAML data, build the movie.
-        for argslist in data['movie']:
-            args = []
+    # Read YAML
+    with open(options.file_name) as yaml_file:
+        data = yaml.load(yaml_file)
+    # Create pipe to connect ConcatenateShots object with Multiplexer.
+    # Closing the file descriptors is taken care of by these objects.
+    fvr, fvw = os.pipe()
+    vr = open(fvr, "rb")
+    vw = open(fvw, "wb")
+    far, faw = os.pipe()
+    ar = open(far, "rb")
+    aw = open(faw, "wb")
+    q = queue.Queue()
+    cat = ConcatenateShots(q, vw, aw)
+    # Optionnaly mix in the music.
+    if 'music' in data:
+        print("Mixing music file", data['music'])
+        mixer = AudioProcessing(ar)
+        mixer.mix(data['music'])
+        ar = mixer.output_audio
+    muxer = Multiplexer(vr, ar)
+    # Interpret YAML data, build the movie.
+    length = 0
+    for argslist in data['movie']:
+        args = []
+        if 'globals' in data:
+            kwargs = data['globals'].copy()
+        else:
             kwargs = {}
-            for arg in argslist:
-                if isinstance(arg, dict):
-                    kwargs = arg
-                    break
-                args.append(arg)
-            print("args =", args)
-            print("kwargs =", kwargs)
-            shot = Shot(*args, **kwargs)
-            print(shot)
-            q.put(shot)
-            length += shot.get_duration()
-        print("finished reading YAML")
-        q.put(None)
+        for arg in argslist:
+            if isinstance(arg, dict):
+                kwargs.update(arg)
+                break
+            args.append(arg)
+        print("args =", args)
+        print("kwargs =", kwargs)
+        shot = Shot(*args, **kwargs)
         if options.showinfo:
-            muxer.add_filter("showdata", length=length)
+            shot.add_filter("showdata")
+        print(shot)
+        q.put(shot)
+        length += shot.get_duration()
+    print("finished reading YAML")
+    q.put(None)
+    cat.start()
+    print("Output:", options.output)
+    if 'multiplexer' in data and 'filters' in data['multiplexer']:
+        for filter in data['multiplexer']['filters']:
+            muxer.add_filter(filter[0], **filter[1])
+    if options.showinfo:
+        muxer.add_filter("showdata", length=length)
+    if options.output:
+        start_time = time.perf_counter()
+        muxer.write_to_files(*options.output)
+        muxer.process.wait()
+        elapsed_time = time.perf_counter() - start_time
+        print("Elapsed time:", elapsed_time)
+        if options.bell:
+            # Play a 440Hz sine wave with 1760Hz beeps every second
+            # for 6 seconds.
+            player = subprocess.Popen(
+                [
+                    "ffplay",
+                    "-f", "lavfi", "sine=440:4:d=6",
+                    "-autoexit",
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                )
+            player.wait()
+    else:
         player = Player(muxer.mux())
         player.process.wait()
-    finally:
-        pass
 #}}}
 
 
