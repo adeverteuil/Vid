@@ -67,6 +67,9 @@ def _parse_args(args=None):                      #{{{1
     parser_yaml.add_argument("--output", "-o", action="append")
     parser_yaml.add_argument("--bell", "-b", action="store_true")
 
+    parser_new = subparsers.add_parser("new")
+    parser_new.set_defaults(func=new_movie)
+
     # Parse argument list, return gathered Namespace object.
     parsed_args =  parser.parse_args(args)
     if 'func' not in parsed_args:
@@ -187,6 +190,10 @@ def play_yaml(options):                          #{{{1
     else:
         player = Player(muxer.mux())
         player.process.wait()
+
+
+def new_movie(options):                          #{{{1
+    print(YAML_TEMPLATE)
 #}}}
 
 

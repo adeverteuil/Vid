@@ -26,6 +26,7 @@ import textwrap
 
 
 from .utils import *
+from .yaml import *
 
 
 __all__ = [
@@ -41,6 +42,8 @@ __all__ = [
     "Multiplexer",
     "SubprocessSupervisor",
     "AudioProcessing",
+    "YAMLReader",
+    "YAML_TEMPLATE",
     ]
 
 

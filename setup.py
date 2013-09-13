@@ -16,7 +16,4 @@ setup(
     packages=["vid", "vid.test"],
     package_data={'vid.test': ["A roll/testsequence/*"]},
     scripts=["scripts/vid"],
-    data_files=[
-        ('/usr/share/vid', ['data_files/template.yaml']),
-        ]
     )
