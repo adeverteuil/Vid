@@ -71,7 +71,7 @@ OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
         ],
     'webm': [
         "-f", "webm",
-        "-vcodec", "libvpx", "-b", "614400",
+        "-vcodec", "libvpx", "-b:v", "1200k",
         "-acodec", "libvorbis",
         ],
     # Low latency, high bandwidth for local pipe.
