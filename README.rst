@@ -77,7 +77,7 @@ expressed with ``[]``.
 
 The default is::
 
-    A roll/\*/M2U{number:05d}.mpg
+    A roll/*/M2U{number:05d}.mpg
 
 It matches my workflow and my camcorder's output file naming scheme.
 
