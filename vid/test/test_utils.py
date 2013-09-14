@@ -36,7 +36,7 @@ from .. import *
 
 
 LOG_TEST_END = "---- Test ended " + ("-" * 54)
-TEST_SHOT = "A roll/testsequence/M2U00054.mpg"
+TEST_SHOT = "footage/testsequence/M2U00054.mpg"
 
 
 workdir = os.path.abspath(os.path.dirname(__file__))
@@ -231,7 +231,7 @@ class UtilsTestCase(unittest.TestCase):
         self.assertRaises(FileNotFoundError, Shot, 1)
         self.assertRaises(FileNotFoundError, Shot, "1")
         self.assertRaises(ValueError, Shot, "a")
-        self.assertEqual(Shot(54).name, "A roll/testsequence/M2U00054.mpg")
+        self.assertEqual(Shot(54).name, "footage/testsequence/M2U00054.mpg")
         self.assertRaises(FileNotFoundError, Shot, 56)
 
         shot = Shot(54)
@@ -350,7 +350,7 @@ class UtilsTestCase(unittest.TestCase):
         # Try with a pipe.
         p = subprocess.Popen(
             [
-                "ffmpeg", "-y", "-i", "A roll/testsequence/M2U00054.mpg",
+                "ffmpeg", "-y", "-i", "footage/testsequence/M2U00054.mpg",
                 "-f", "avi", "-t", "1", "pipe:"
             ],
             stdin=subprocess.DEVNULL,
@@ -551,5 +551,5 @@ class UtilsTestCase(unittest.TestCase):
     def test_probe_duration(self):
         logger = logging.getLogger(__name__+".test_audioprocessing_mix")
         logger.debug("Testing Shot.add_filter()")
-        probe = Probe("A roll/testsequence/M2U00054.mpg")
+        probe = Probe("footage/testsequence/M2U00054.mpg")
         self.assertIsInstance(probe.get_duration(), float)

@@ -77,12 +77,12 @@ expressed with ``[]``.
 
 The default is::
 
-    A roll/*/M2U{number:05d}.mpg
+    footage/*/M2U{number:05d}.mpg
 
 It matches my workflow and my camcorder's output file naming scheme.
 
 * It does not start with "/", thus the path is relative to the current working directory.
-* Look in subdirectories of the "``A roll``" directory ("``A roll/*/``").
+* Look in subdirectories of the "``footage``" directory ("``footage/*/``").
 * The filenames start with "``M2U``", followed by a zero-padded 5 digit
   number (format specified as "``:``" then "``05d``"), then the "``.mpg``"
   extension.
@@ -96,7 +96,7 @@ Here is my typical project directory structure.
 
     project A
     ├── movie.yaml
-    └── A roll
+    └── footage
         ├── 2013-09-12
         │   ├── M2U00021.mpg
         │   └── M2U00022.mpg

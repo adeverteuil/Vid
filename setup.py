@@ -14,6 +14,6 @@ setup(
     license="GPLv3",
     requires=["yaml"],
     packages=["vid", "vid.test"],
-    package_data={'vid.test': ["A roll/testsequence/*"]},
+    package_data={'vid.test': ["footage/testsequence/*"]},
     scripts=["scripts/vid"],
     )
