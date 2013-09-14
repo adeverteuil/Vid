@@ -603,12 +603,12 @@ class Shot(FFmpegWrapper):                       #{{{1
         self.logger = logging.getLogger(__name__+".Shot")
         self.number = int(number)
         try:
-            self.name = glob.glob(pattern)[0]
+            self.name = glob.glob(pattern.format(number=self.number))[0]
         except IndexError as err:
             self.name = None
             raise FileNotFoundError(
                 "Didn't find footage number {}.\n"
-                "Pattern is \"{}\".".format(self.number, pattern)
+                "Pattern is \"{}\".".format(self.number, self.name)
                 ) from err
         except :
             self.logger.exception("That's a new exception?!")
