@@ -20,6 +20,8 @@
 #}}}
 
 
+import unittest
+
 from .. import *
 
 
