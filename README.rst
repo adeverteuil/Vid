@@ -70,7 +70,7 @@ order:
 * The default.
 
 The pattern is a `Python format string`_ which may include a ``{number}``
-replacement field, shell globing characters ``\*``, ``?`` and character ranges
+replacement field, shell globing characters ``*``, ``?`` and character ranges
 expressed with ``[]``.
 
 .. _`Python format string`: http://docs.python.org/3/library/string.html#format-string-syntax
