@@ -44,6 +44,7 @@ __all__ = [
     "AudioProcessing",
     "YAMLReader",
     "YAML_TEMPLATE",
+    "DEFAULT_PATTERN",
     ]
 
 

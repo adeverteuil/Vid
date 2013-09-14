@@ -47,11 +47,15 @@ globals:  # Optional
   # These keyword parameters will be passed
   # to every shots unless overridden in the
   # movie section.
-  silent: false
+  silent: false  # Set to "true" to make a silent movie.
+                 # You can still mix music after.
+  # This is the file path name pattern as a Python format string.
+  # Edit it to suit your workflow.
+  pattern: "|pattern|"
 music:  # Optional
   # The music track for the movie.
-  # Write the filename.
-  ~  # this is the YAML syntax for "none".
+  # Replace the next line with the filename.
+  ~  # "~" is YAML syntax for "none".
 movie:
   # A sequence of shots.
   # Each shot is described by a sequence of arguments
@@ -91,7 +95,7 @@ multiplexer:
         text: |
           This is an example of rolling credits
           starting at timestamp 1 and ending
-          at timestamp 10.
+          at timestamp 10.\
 """.format(
     date=datetime.date.today().strftime("%Y-%m-%d"),
     name=os.getenv('LOGNAME', default="Your Name"),
@@ -228,6 +232,8 @@ class YAMLReader():                              #{{{1
 
         At this time, only a file name is accepted.
         """
+        if data is None:
+            return None
         if not os.path.isfile(data):
             raise FileNotFoundError("Music file {} not found.".format(data))
         return data

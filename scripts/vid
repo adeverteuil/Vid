@@ -36,6 +36,19 @@ from vid import *
 
 
 # Global variables                               {{{1
+
+# The default file path name pattern is successively overriden by:
+# 1. The VID_PATTERN environment variable,
+# 2. A file named .vid_pattern in the current working directory,
+# 3. The "pattern" variable in the "globals" section of the .yaml file,
+# 4. The -p command line argument,
+# 5. The "pattern" key of a shot description in the "movie" section of the
+#    .yaml file.
+# Here is 1 and 2:
+DEFAULT_PATTERN = os.getenv('VID_PATTERN', DEFAULT_PATTERN)
+if os.path.isfile(".vid_pattern"):
+    with open(".vid_pattern") as f:
+        DEFAULT_PATTERN = f.readline().strip()
 #}}}
 
 
@@ -49,56 +62,60 @@ def _parse_args(args=None):                      #{{{1
     parser = argparse.ArgumentParser(
         description="A CLI video editor.",
         )
-    subparsers = parser.add_subparsers(help="vid expects a sub-command")
+    parser.add_argument("-p", "--pattern",
+        type=str,
+        help="the file path name pattern, as a Python format string",
+        )
+    subparsers = parser.add_subparsers(help="vid expects a sub-command:")
 
     # Create the parser for the "play" command.
     parser_play = subparsers.add_parser("play",
-        help="Find a file by it's number and play it",
+        help="find a file by it's number and play it",
         )
     parser_play.set_defaults(func=play)
     parser_play.add_argument("file_number",
         type=int,
-        help="The number of the media file to read",
+        help="the number of the media file to read",
         )
     parser_play.add_argument("seek",
         type=float, nargs="?", default=0,
-        help="The timecode to seek to",
+        help="the timecode to seek to",
         )
     parser_play.add_argument("duration",
         type=float, nargs="?", default=None,
-        help="The duration for which to play for",
+        help="the duration for which to play for",
         )
     parser_play.add_argument("-o", "--output",
-        help=("The file name to which to save the preview; "
+        help=("the file name to which to save the preview; "
               "the file extension specifies the container format"),
             )
 
     # Create the parser for the "yaml" command.
     parser_yaml = subparsers.add_parser("yaml",
-        help="Read YAML file, play or write a video file",
+        help="read YAML file, play or write a video file",
         )
     parser_yaml.set_defaults(func=play_yaml)
     parser_yaml.add_argument("file_name",
-        type=str, help="The YAML file to read",
+        type=str, help="the YAML file to read",
         )
     parser_yaml.add_argument("-s", "--showinfo",
         action="store_true",
-        help="Burn filenames and timecode information on the video",
+        help="burn filenames and timecode information on the video",
         )
     parser_yaml.add_argument("-o", "--output",
         action="append",
-        help=("If one or more output option is given, write video "
+        help=("if one or more output option is given, write video "
               "to the given filename, encoded in the formats derived "
               "from the filenames extensions"),
         )
     parser_yaml.add_argument("-b", "--bell",
         action="store_true",
-        help="Produce a beep when encoding is finished",
+        help="produce a beep when encoding is finished",
         )
 
     # Create the subparser for the "new" command.
     parser_new = subparsers.add_parser("new",
-        help="Write a template YAML file with helpful comments to stdout",
+        help="write a template YAML file with helpful comments to stdout",
         )
     parser_new.set_defaults(func=new_movie)
 
@@ -119,7 +136,10 @@ def play(args):                                  #{{{1
     else:
         print("until EOF.")
     try:
-        shot = Shot(args.file_number).cut(args.seek, args.duration)
+        shot = Shot(
+            args.file_number, args.seek, args.duration,
+            pattern=args.pattern or DEFAULT_PATTERN,
+            )
         shot.add_filter("showdata")
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
@@ -174,6 +194,9 @@ def play_yaml(options):                          #{{{1
         args = []
         if 'globals' in data:
             kwargs = data['globals'].copy()
+            # -p option overrides .yaml's global pattern.
+            if options.pattern:
+                kwargs['pattern'] = options.pattern
         else:
             kwargs = {}
         for arg in argslist:
@@ -224,7 +247,9 @@ def play_yaml(options):                          #{{{1
 
 
 def new_movie(options):                          #{{{1
-    print(YAML_TEMPLATE)
+    print(
+        YAML_TEMPLATE.replace("|pattern|", options.pattern or DEFAULT_PATTERN)
+        )
 #}}}
 
 

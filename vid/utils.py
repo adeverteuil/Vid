@@ -51,6 +51,7 @@ RAW_AUDIO = [
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
 # Set the default font for drawtext filter.
 FONTFILE = "/usr/share/fonts/TTF/ttf-inconsolata.otf"
+DEFAULT_PATTERN = "A roll/*/M2U{number:05d}.mpg"
 OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
     'avi': [
         "-f", "avi",
@@ -60,7 +61,6 @@ OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
         "-ac", "2", "-ar", "44100", "-ab", "128k",
         "-qscale:v", "6",
         ],
-    # ogg and webm format from http://diveintohtml5.info/video.html.
     'ogv': [
         "-f", "ogg",
         "-vcodec", "libtheora",
@@ -598,16 +598,10 @@ class Shot(FFmpegWrapper):                       #{{{1
 
     This is the simplest building block for a movie.
     """
-    def __init__(self, number, seek=0, dur=None, filters=None, silent=False):
+    def __init__(self, number, seek=0, dur=None, filters=None, silent=False,
+                 pattern=DEFAULT_PATTERN):
         self.logger = logging.getLogger(__name__+".Shot")
         self.number = int(number)
-        pattern = "{folder}/*/{prefix}{number:{numfmt}}.{ext}".format(
-            folder="A roll",
-            prefix="M2U",
-            number=self.number,
-            numfmt="05d",
-            ext="mpg",
-            )
         try:
             self.name = glob.glob(pattern)[0]
         except IndexError as err:
