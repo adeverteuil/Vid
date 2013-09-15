@@ -148,7 +148,7 @@ def play(args):                                  #{{{1
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
         muxer.add_filter("showdata", length=shot.get_duration())
         if args.output:
-            print("Writing to", args.output)
+            print("Output:", args.output)
             try:
                 muxer.write_to_files(args.output)
             except KeyError:
@@ -159,6 +159,7 @@ def play(args):                                  #{{{1
                     )
                 return
         else:
+            print("Output: stream to player")
             player = Player(muxer.mux())
             player.process.wait()
         muxer.process.wait()
@@ -207,8 +208,6 @@ def play_yaml(options):                          #{{{1
                 kwargs.update(arg)
                 break
             args.append(arg)
-        print("args =", args)
-        print("kwargs =", kwargs)
         shot = Shot(*args, **kwargs)
         if options.showinfo:
             shot.add_filter("showdata")
@@ -218,7 +217,7 @@ def play_yaml(options):                          #{{{1
     print("finished reading YAML")
     q.put(None)
     cat.start()
-    print("Output:", options.output)
+    print("Output:", options.output or "stream into player")
     if 'multiplexer' in data and 'filters' in data['multiplexer']:
         for filter in data['multiplexer']['filters']:
             muxer.add_filter(filter[0], **filter[1])
