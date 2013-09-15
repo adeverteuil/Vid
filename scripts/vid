@@ -30,6 +30,7 @@ import os.path
 import logging
 import datetime
 import argparse
+import textwrap
 import subprocess
 
 import yaml
@@ -260,8 +261,19 @@ def new_movie(options):                          #{{{1
 
 
 if __name__ == "__main__":
-    # Main loop
-    # Parse command line arguments.
-    args = _parse_args()
-    # Execute function defined by subcommand argument.
-    args.func(args)
+    try:
+        # Main loop
+        # Parse command line arguments.
+        args = _parse_args()
+        # Execute function defined by subcommand argument.
+        args.func(args)
+    except Exception as err:
+        # Pretty printing of all exceptions as a neat error message.
+        if err.__class__.__name__[0] in "AEIOUY":
+            a = "an"
+        else:
+            a = "a"
+        print("Aborted! There was {} {}:".format(a, err.__class__.__name__))
+        message = textwrap.indent(err.args[0], "    ")
+        print(message)
+        sys.exit(1)
