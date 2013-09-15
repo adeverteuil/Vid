@@ -21,6 +21,7 @@
 
 
 import io
+import yaml
 import os.path
 import logging
 import unittest
@@ -50,8 +51,79 @@ class YAMLTestCase(unittest.TestCase):
                 self.assertEqual(data, ["a", "b"])
 
         # Check a valid document.
-        doc = (
-            "movie: [1, 2, 3]\nmultiplexer: ~"
-            )
+        doc = "movie:\n  - [1, 2, 3]\nmultiplexer: ~"
         reader = YAMLReader()
-        reader.load(doc)
+        self.assertEqual(
+            reader.load(doc),
+            {'movie': [[1, 2, 3, {}]]},
+            )
+
+        # Check invalid document.
+        doc = "multiplexer: ~"
+        with self.assertRaises(KeyError):
+            reader.load(doc)
+
+    def test_yamlreader_methods(self):
+        logger = logging.getLogger(__name__+".test_yamlreader_methods")
+        logger.debug("Testing YAMLReader methods")
+        reader = YAMLReader()
+
+        # Testing _load().
+        # Will test valid and invalid string, pathname and open file.
+        doc = "{movie: [[1, 2, 3]]}"
+        self.assertEqual(
+            reader._load(doc),
+            {'movie': [[1, 2, 3]]}
+            )
+        with self.assertRaises(yaml.YAMLError):
+            reader._load("asf: - [1] - [1]")
+        with tempfile.NamedTemporaryFile("w+t") as f:
+            self.assertEqual(
+                reader._load(f.name),
+                None
+                )
+            f.write("- a\n- b")
+            f.seek(0)
+            self.assertEqual(
+                reader._load(f.name),
+                ["a", "b"]
+                )
+            # Append invalid syntax.
+            f.write(": - c")
+            f.seek(0)
+            with self.assertRaises(yaml.YAMLError):
+                reader._load(f.name)
+            f.seek(0)
+            f.write("- a\n- b\n- c")
+            f.truncate()
+            f.seek(0)
+            self.assertEqual(
+                reader._load(f),
+                ["a", "b", "c"]
+                )
+
+            # Keep _check_root() and load() for the end.
+            # Test _check_filter()
+            good_filters = [
+                "a_string",
+                ["a_string_in_a_list"],
+                ["a_string_and_empty_kwargs", {}],
+                ["a_string_and_None", None],
+                ["a_string_and_kwargs", {'key1': "value1", 'key2': 2}],
+                ]
+            for f in good_filters:
+                data = reader._check_filter(f, ["test"])
+                # Check canonical form.
+                self.assertIsInstance(data, list)
+                self.assertIsInstance(data[0], str)
+                self.assertIsInstance(data[1], dict)
+            with self.assertRaisesRegex(ValueError, "not a list.*2 items"):
+                reader._check_filter(None, ["test"])
+            with self.assertRaisesRegex(ValueError, "name is not a string"):
+                reader._check_filter([(1, 2)], ["test"])
+            with self.assertRaisesRegex(ValueError, "Filter.*not a mapping"):
+                reader._check_filter(["filter", ("x", "y")], ["test"])
+            with self.assertRaisesRegex(ValueError, "keys must be strings"):
+                reader._check_filter(["f", {1: "y"}], ["test"])
+            with self.assertRaisesRegex(ValueError, "values must be"):
+                reader._check_filter(["f", {"x": None}], ["test"])

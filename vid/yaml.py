@@ -106,6 +106,12 @@ class YAMLReader():                              #{{{1
         self.data = None
 
     def _load(self, source):
+        """Load YAML. No data validation is made at this point.
+
+        Argument:
+        source -- A YAML document as a string, a file pathname
+                  or an open file object.
+        """
         if isinstance(source, str) and os.path.isfile(source):
             # if source is a filename, read the corresponding file.
             with open(source) as file:
@@ -254,6 +260,7 @@ class YAMLReader():                              #{{{1
         Arguments:
         data -- The filter specification to validate.
         where -- The location, increases error message value for the user.
+                 It is a list of strings.
 
         Returns:
         [filtername, filterargs]
@@ -269,18 +276,18 @@ class YAMLReader():                              #{{{1
         """
         error_msg = (
             "Invalid filter: {}\n"
-            "Specified in {}.\n{{}}".format(data, self._format_where(where))
+            "Specified in {}.\n".format(data, self._format_where(where))
             )
         if isinstance(data, str):
             # Data is simply a filter name.
             return [data, {}]
         if not isinstance(data, list) or len(data) > 2:
             reason = "Filter is not a list of maximum 2 items."
-            raise ValueError(error_msg.format(reason))
+            raise ValueError(error_msg+reason)
         filtername = data[0]
         if not isinstance(filtername, str):
             reason = "Filter name is not a string."
-            raise ValueError(error_msg.format(reason))
+            raise ValueError(error_msg+reason)
         if len(data) == 1:
             filterargs = {}
         elif len(data) == 2:
@@ -289,15 +296,15 @@ class YAMLReader():                              #{{{1
                 filterargs = {}
             elif not isinstance(filterargs, dict):
                 reason = "Filter arguments is not a mapping."
-                raise ValueError(reason_msg.format(reason))
+                raise ValueError(error_msg+reason)
             for k, v in filterargs.items():
                 if not isinstance(k, str):
                     reason = "Filter argument keys must be strings."
-                    raise ValueError(reason_msg.format(reason))
+                    raise ValueError(error_msg+reason)
                 if not isinstance(v, (str, int, float)):
                     reason = "Filter argument values must be strings, "
                     reason += "integers or floats."
-                    raise ValueError(reason_msg.format(reason))
+                    raise ValueError(error_msg+reason)
         return [filtername, filterargs]
 
     def _format_where(self, where):
