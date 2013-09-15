@@ -190,6 +190,8 @@ class YAMLTestCase(unittest.TestCase):
                 reader._check_movie("list is expected")
             with self.assertRaises(ValueError):
                 reader._check_movie([])
+            with self.assertRaises(TypeError):
+                reader._check_movie(None)
             self.assertEqual(
                 reader._check_movie(
                     [1, [1], [1, 2, 3], [2, {'filters': ["a"]}]]
@@ -201,3 +203,24 @@ class YAMLTestCase(unittest.TestCase):
                     [2, {'filters': [["a", {}]]}]
                 ]
                 )
+
+            # Test _check_root()
+            with self.assertRaises(TypeError):
+                reader._check_root(["A dict is expected."])
+            # Optional keys may have a None value.
+            self.assertEqual(
+                reader._check_root(
+                    {
+                        'movie': [1],
+                        'multiplexer': None,
+                        'music': None,
+                        'meta': None,
+                        'globals': None,
+                    }
+                    ),
+                {'movie'}
+                )
+            with self.assertRaises(KeyError):
+                reader._check_root({})
+            with self.assertRaises(KeyError):
+                reader._check_root({'bogus_key': "foo"})
