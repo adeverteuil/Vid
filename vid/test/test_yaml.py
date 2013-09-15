@@ -224,3 +224,34 @@ class YAMLTestCase(unittest.TestCase):
                 reader._check_root({})
             with self.assertRaises(KeyError):
                 reader._check_root({'bogus_key': "foo"})
+
+            # Test load()
+            with tempfile.NamedTemporaryFile() as n:
+                data = (
+                    "movie:\n"
+                    "  - [1]\n"
+                    "  - 4\n"
+                    "  - [4, 1, 10.25]\n"
+                    "multiplexer:\n"
+                    "  filters:\n"
+                    "    - - movingtext\n"
+                    "      - text: This is a test\n"
+                    "music: {file}\n"
+                    "globals: ~\n"
+                    "meta: ~\n"
+                    ).format(file=n.name)
+                canonical = {
+                    'movie': [
+                        [1, {}],
+                        [4, {}],
+                        [4, 1, 10.25, {}]
+                        ],
+                    'multiplexer': {
+                        'filters': [["movingtext", {'text': "This is a test"}]],
+                        },
+                    'music': n.name,
+                    }
+                self.assertEqual(
+                    reader.load(data),
+                    canonical
+                    )
