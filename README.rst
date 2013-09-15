@@ -52,6 +52,7 @@ Requirements
 
 * Python 3.x
 * PyYAML 3.10
+* FFMpeg
 
 Setting the file name pattern
 -----------------------------
