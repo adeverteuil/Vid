@@ -475,7 +475,7 @@ class ConcatenateShots(threading.Thread):        #{{{1
                     self.queue.task_done()
                     raise queue.Empty
                 assert isinstance(shot, Shot)
-                buffer.append(shot.dur)
+                buffer.append(shot.dur or 0)  # In case shot.dur is None
                 if (sum(buffer) < min_buffer and
                     not self.semaphore.acquire(blocking=False)
                     ):
