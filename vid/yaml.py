@@ -168,9 +168,25 @@ class YAMLReader():                              #{{{1
     def _check_movie(self, data):
         """Check and canonicalize movie data.
 
+        """
+        if not isinstance(data, list):
+            raise TypeError("The \"movie\" key must contain a list!")
+        if len(data) == 0:
+            raise ValueError("Movie has no shots in it!")
+        shots = []
+        index = 0
+        for shot in data:
+            index += 1
+            where = ['movie', "shot #{}".format(index)]
+            shots.append(self._check_shot(shot, where))
+        return shots
+
+    def _check_shot(self, data, where):
+        """Check and canonicalize shot data.
+
         Movie data is passed as arguments to the Shot() constructor.
 
-        Examples of valid movies:
+        Examples of valid shots in the movie mapping:
         - 42
         - [42]
         - [42, 4]
@@ -178,45 +194,55 @@ class YAMLReader():                              #{{{1
         - [42, 4, 2, {filters: […]}]
 
         Returns:
-        A list of 1 to 3 ints plus an optional dict.
+        A list of 1 to 3 ints plus a possibly empty dict.
         """
         error_msg = (
             "Invalid shot specification: {}\n"
-            "Element {{}} in movie.\n{{}}".format(data)
+            "Element {}.\n".format(data, self._format_where(where))
             )
-        index = 0
-        if not isinstance(data, list):
-            raise ValueError("The \"movie\" key must be a list!")
+        if not isinstance(data, (int, list)):
+            reason = "Shot specification must be a list or an integer."
+            raise TypeError(error_msg+reason)
+        if isinstance(data, int):
+            data = [data]
         if len(data) == 0:
-            raise ValueError("Movie has no shots in it!")
-        shots = []
-        for shot in data:
-            index += 1
-            if isinstance(shot, int):
-                shot = [shot]
-            if isinstance(shot[-1], dict):
-                kwargs = shot.pop()
-                if 'filters' in kwargs:
-                    filters = []
-                    for f in kwargs['filters']:
-                        filters.append(
-                            self._check_filter(f, ["movie", str(index)])
-                            )
-                    kwargs.update({'filters': filters})
-            else:
-                kwargs = {}
-            if 1 > len(shot) > 3:
-                reason = "Shot specification must provide 1 to 3 integers."
-                raise ValueError(error_msg.format(index, reason))
-            shot.append(kwargs)
-            shots.append(shot)
-        return shots
+            reason = "Shot specification is empty."
+            raise ValueError(error_msg+reason)
+        if isinstance(data[-1], dict):
+            kwargs = data.pop()
+            if 'filters' in kwargs:
+                filters = []
+                for f in kwargs['filters']:
+                    filters.append(
+                        self._check_filter(f, where)
+                        )
+                kwargs.update({'filters': filters})
+        else:
+            kwargs = {}
+        if not 1 <= len(data) <= 3:
+            reason = "Shot specification must provide 1 to 3 integers."
+            raise ValueError(error_msg+reason)
+        data.append(kwargs)
+        return data
 
     def _check_multiplexer(self, data):
         """Check and canonicalize multiplexer data.
 
         For now, only the filters key is supported.
         """
+        if data is None:
+            return
+        valid_keys = {'filters'}
+        if not set(data) <= set(valid_keys):
+            invalid_keys = set(data) - set(valid_keys)
+            if len(invalid_keys) == 1:
+                pluralize = "Key {} is invalid.".format(invalid_keys)
+            else:
+                pluralize = "Keys {} are invalid.".format(invalid_keys)
+            raise KeyError(
+                "Valid keys in globals are: {}.\n".format(set(valid_keys))
+                + pluralize
+                )
         if 'filters' in data:
             if not isinstance(data['filters'], list):
                 raise ValueError("Multiplexer filters must be a list.")

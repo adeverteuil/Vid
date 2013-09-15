@@ -160,3 +160,44 @@ class YAMLTestCase(unittest.TestCase):
                     )
             with self.assertRaises(TypeError):
                 reader._check_music(["foo"])
+
+            # Test _check_multiplexer().
+            # None is acceptable.
+            self.assertIsNone(reader._check_multiplexer(None))
+            with self.assertRaises(KeyError):
+                reader._check_multiplexer({'foo': 4})
+            self.assertEqual(
+                reader._check_multiplexer({'filters': [["showinfo", {}]]}),
+                {'filters': [["showinfo", {}]]}
+                )
+
+            # Test _check_shot()
+            with self.assertRaises(TypeError):
+                reader._check_shot(
+                    "Some test string where list is expected",
+                    ["test"]
+                    )
+            with self.assertRaises(TypeError):
+                reader._check_shot(None, ["test"])
+            with self.assertRaises(ValueError):
+                reader._check_shot([], ["test"])
+            self.assertEqual(reader._check_shot([42], ["test"]), [42, {}])
+            with self.assertRaises(ValueError):
+                reader._check_shot([1, 2, 3, 4], ["test"])
+
+            # Test _check_movie()
+            with self.assertRaises(TypeError):
+                reader._check_movie("list is expected")
+            with self.assertRaises(ValueError):
+                reader._check_movie([])
+            self.assertEqual(
+                reader._check_movie(
+                    [1, [1], [1, 2, 3], [2, {'filters': ["a"]}]]
+                    ),
+                [
+                    [1, {}],
+                    [1, {}],
+                    [1, 2, 3, {}],
+                    [2, {'filters': [["a", {}]]}]
+                ]
+                )
