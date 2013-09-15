@@ -266,6 +266,9 @@ if __name__ == "__main__":
         args = _parse_args()
         # Execute function defined by subcommand argument.
         args.func(args)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.")
+        sys.exit(1)
     except Exception as err:
         # Pretty printing of all exceptions as a neat error message.
         if err.__class__.__name__[0] in "AEIOUY":
