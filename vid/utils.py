@@ -150,7 +150,7 @@ class RemoveHeader(threading.Thread):            #{{{1
         self.write_barrier = threading.Barrier(parties)
         self.finished = threading.Event()
 
-        super(RemoveHeader, self).__init__()
+        super(RemoveHeader, self).__init__(daemon=True)
 
     def run(self):
         self.logger.debug(
@@ -268,7 +268,7 @@ class PipeHelper(threading.Thread):              #{{{1
         self.bytes_written = 0
         self.exception = None
 
-        super(PipeHelper, self).__init__()
+        super(PipeHelper, self).__init__(daemon=True)
 
     def run(self):
         self.logger.debug(
@@ -310,7 +310,7 @@ class GenerateSilence(threading.Thread):         #{{{1
         self.exception = None
         self.finished = threading.Event()
 
-        super(GenerateSilence, self).__init__()
+        super(GenerateSilence, self).__init__(daemon=True)
 
     def run(self):
         self.logger.debug(
@@ -355,7 +355,7 @@ class ConcatenateStreams(threading.Thread):      #{{{1
         self.exception = None
         self.finished = threading.Event()
 
-        super(ConcatenateStreams, self).__init__()
+        super(ConcatenateStreams, self).__init__(daemon=True)
 
     def run(self):
         self.logger.debug(
@@ -406,6 +406,7 @@ class SubprocessSupervisor(threading.Thread):    #{{{1
         self.fn = fn
         self.action = action
 
+        kwargs['daemon'] = True
         super(SubprocessSupervisor, self).__init__(*args, **kwargs)
 
     def run(self):
@@ -453,7 +454,7 @@ class ConcatenateShots(threading.Thread):        #{{{1
         self.v_out = v_out
         self.a_out = a_out
 
-        super(ConcatenateShots, self).__init__()
+        super(ConcatenateShots, self).__init__(daemon=True)
 
     def run(self):
         self.logger.debug("Thread starting: Concatenating shots.")
