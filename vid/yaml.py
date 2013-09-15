@@ -21,10 +21,8 @@
 
 
 # Imports                                        {{{1
-import os
 import os.path
 import logging
-import datetime
 
 import yaml
 
@@ -51,7 +49,7 @@ globals:  # Optional
                  # You can still mix music after.
   # This is the file path name pattern as a Python format string.
   # Edit it to suit your workflow.
-  pattern: "|pattern|"
+  pattern: "{pattern}"
 music:  # Optional
   # The music track for the movie.
   # Replace the next line with the filename.
@@ -96,10 +94,7 @@ multiplexer:
           This is an example of rolling credits
           starting at timestamp 1 and ending
           at timestamp 10.\
-""".format(
-    date=datetime.date.today().strftime("%Y-%m-%d"),
-    name=os.getenv('LOGNAME', default="Your Name"),
-    )
+"""
 #}}}
 
 
