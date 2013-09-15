@@ -234,7 +234,7 @@ class YAMLReader():                              #{{{1
         At this time, only a file name is accepted.
         """
         if data is None:
-            return None
+            return
         if not os.path.isfile(data):
             raise FileNotFoundError("Music file {} not found.".format(data))
         return data
@@ -244,14 +244,44 @@ class YAMLReader():                              #{{{1
         return data
 
     def _check_globals(self, data):
-        """Check and canonicalize global kwargs."""
+        """Check and canonicalize global kwargs.
+
+        kwargs must be a subset of those accepted by the Shot constructor.
+        globals is optional, therefore None is acceptable.
+        """
+        if data is None:
+            return
+        valid_keys = {
+            'silent': bool,
+            'filters': list,
+            'pattern': str,
+            }
+        if not isinstance(data, dict):
+            raise TypeError(
+                "Globals must be a mapping. "
+                "Valid keys are: {}".format(valid_keys)
+                )
+        if not set(data) <= set(valid_keys):
+            invalid_keys = set(data) - set(valid_keys)
+            if len(invalid_keys) == 1:
+                pluralize = "Key {} is invalid.".format(invalid_keys)
+            else:
+                pluralize = "Keys {} are invalid.".format(invalid_keys)
+            raise KeyError(
+                "Valid keys in globals are: {}.\n".format(set(valid_keys))
+                + pluralize
+                )
         if 'filters' in data:
             if not isinstance(data['filters'], list):
-                raise ValueError("Global filters must be a list.")
+                raise TypeError("Global filters must be a list.")
             sane_filters = []
-            for filter in filters:
+            for filter in data['filters']:
                 sane_filters.append(self._check_filter(filter, ["globals"]))
             data['filters'] = sane_filters
+        if 'silent' in data and not isinstance(data['silent'], bool):
+            raise TypeError("\"silent\" value in \"globals\" must be boolean.")
+        if 'pattern' in data and not isinstance(data['pattern'], str):
+            raise TypeError("\"pattern\" value in \"globals\" must be string.")
         return data
 
     def _check_filter(self, data, where):
@@ -287,7 +317,7 @@ class YAMLReader():                              #{{{1
         filtername = data[0]
         if not isinstance(filtername, str):
             reason = "Filter name is not a string."
-            raise ValueError(error_msg+reason)
+            raise TypeError(error_msg+reason)
         if len(data) == 1:
             filterargs = {}
         elif len(data) == 2:
@@ -296,15 +326,15 @@ class YAMLReader():                              #{{{1
                 filterargs = {}
             elif not isinstance(filterargs, dict):
                 reason = "Filter arguments is not a mapping."
-                raise ValueError(error_msg+reason)
+                raise TypeError(error_msg+reason)
             for k, v in filterargs.items():
                 if not isinstance(k, str):
                     reason = "Filter argument keys must be strings."
-                    raise ValueError(error_msg+reason)
+                    raise TypeError(error_msg+reason)
                 if not isinstance(v, (str, int, float)):
                     reason = "Filter argument values must be strings, "
                     reason += "integers or floats."
-                    raise ValueError(error_msg+reason)
+                    raise TypeError(error_msg+reason)
         return [filtername, filterargs]
 
     def _format_where(self, where):

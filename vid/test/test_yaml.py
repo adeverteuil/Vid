@@ -119,11 +119,44 @@ class YAMLTestCase(unittest.TestCase):
                 self.assertIsInstance(data[1], dict)
             with self.assertRaisesRegex(ValueError, "not a list.*2 items"):
                 reader._check_filter(None, ["test"])
-            with self.assertRaisesRegex(ValueError, "name is not a string"):
+            with self.assertRaisesRegex(TypeError, "name is not a string"):
                 reader._check_filter([(1, 2)], ["test"])
-            with self.assertRaisesRegex(ValueError, "Filter.*not a mapping"):
+            with self.assertRaisesRegex(TypeError, "Filter.*not a mapping"):
                 reader._check_filter(["filter", ("x", "y")], ["test"])
-            with self.assertRaisesRegex(ValueError, "keys must be strings"):
+            with self.assertRaisesRegex(TypeError, "keys must be strings"):
                 reader._check_filter(["f", {1: "y"}], ["test"])
-            with self.assertRaisesRegex(ValueError, "values must be"):
+            with self.assertRaisesRegex(TypeError, "values must be"):
                 reader._check_filter(["f", {"x": None}], ["test"])
+
+            # Test _check_globals()
+            # None is acceptable.
+            self.assertIsNone(reader._check_globals(None))
+            with self.assertRaises(TypeError):
+                reader._check_globals("String is not a valid type")
+            with self.assertRaises(KeyError):
+                reader._check_globals({'foo': "Not a Shot constructor kwarg."})
+            with self.assertRaises(TypeError):
+                reader._check_globals({'filters': "string instead of list"})
+            with self.assertRaises(TypeError):
+                reader._check_globals({'silent': "string instead of bool"})
+            with self.assertRaises(TypeError):
+                reader._check_globals({'pattern': True}) # instead of string
+            self.assertEqual(
+                reader._check_globals(
+                    {'pattern': "test", 'silent': False, 'filters': ["test"]}
+                    ),
+                {'pattern': "test", 'silent': False, 'filters': [["test", {}]]}
+                )
+
+            # Test _check_music()
+            # Nons is acceptable
+            self.assertIsNone(reader._check_music(None))
+            with self.assertRaises(FileNotFoundError):
+                reader._check_music("foo")
+            with tempfile.NamedTemporaryFile() as t:
+                self.assertEqual(
+                    reader._check_music(t.name),
+                    t.name
+                    )
+            with self.assertRaises(TypeError):
+                reader._check_music(["foo"])
