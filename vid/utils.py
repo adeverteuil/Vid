@@ -50,7 +50,7 @@ RAW_AUDIO = [
     ]
 SUBPROCESS_LOG = "Subprocess pid {}:\n{}"
 # Set the default font for drawtext filter.
-FONTFILE = "/usr/share/fonts/TTF/ttf-inconsolata.otf"
+FONTFILE = "/usr/share/fonts/OTF/Inconsolata.otf"
 DEFAULT_PATTERN = "footage/*/M2U{number:05d}.mpg"
 OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
     'avi': [
