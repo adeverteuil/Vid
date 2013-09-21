@@ -1,4 +1,6 @@
 __pycache__
+*.egg
+*.egg-info
 .*swp
 arglist
 log
