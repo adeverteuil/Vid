@@ -64,14 +64,14 @@ OUTPUT_FORMATS = { # Generally, make keys refer to file extensions.
     'ogv': [
         "-f", "ogg",
         "-vcodec", "libtheora",
-        "-qscale:v", "5",
+        "-qscale:v", "8",
         # Max quality is 10.
         "-acodec", "libvorbis",
         "-qscale:a", "3",
         ],
     'webm': [
         "-f", "webm",
-        "-vcodec", "libvpx", "-b:v", "1200k",
+        "-vcodec", "libvpx", "-b:v", "2000k",
         "-acodec", "libvorbis",
         ],
     # Low latency, high bandwidth for local pipe.
