@@ -103,6 +103,14 @@ below for a detailed description of this file's format.
 new
 ---
 
+Writes a YAML template to stdout. You may want to redirect output to a file name. For example::
+
+    $ vid new > movie.yaml
+
+The template contains comments that will hopefully get you started
+quickly. Consult the FILES section for a detailed description of the
+YAML syntax specific to Vid.
+
 ENVIRONMENT
 ===========
 
