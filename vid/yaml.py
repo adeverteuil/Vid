@@ -240,7 +240,7 @@ class YAMLReader():                              #{{{1
             else:
                 pluralize = "Keys {} are invalid.".format(invalid_keys)
             raise KeyError(
-                "Valid keys in globals are: {}.\n".format(set(valid_keys))
+                "Valid keys in multiplexer are: {}.\n".format(set(valid_keys))
                 + pluralize
                 )
         if 'filters' in data:
