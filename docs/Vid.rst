@@ -19,52 +19,28 @@ SYNOPSIS
 
 ``vid`` ``-h``
 
-``vid`` ``play`` [``-h``] [``-o`` *OUTPUT*] *file_number* [*seek*] [*duration*]
+``vid`` ``play`` [``-h``] *file_number* [*seek*] [*duration*]
+[``-o`` *OUTPUT* [``-o`` *OUTPUT*] ...]
 
-``vid`` ``yaml`` [``-h``] *yaml_file* [``-b``] [``-s``] [``-o`` *OUTPUT* [``-o`` *OUTPUT*] ...]
+``vid`` ``yaml`` [``-h``] *yaml_file* [``-b``] [``-s``]
+[``-o`` *OUTPUT* [``-o`` *OUTPUT*] ...]
 
 ``vid`` ``new`` [``-h``]
 
 DESCRIPTION
 ===========
 
-Vid is a CLI video editor written in Python which uses ffmpeg in the background. Because editing video in a terminal is bad-ass.
+Vid is a CLI video editor written in Python which uses ffmpeg in the
+background. Because editing video in a terminal is bad-ass.
 
-.. TODO
-..
-    The following is a reference for the author and will be removed.
-
-..  gives an explanation of what the program, function, or format does.
-    Discuss how it interacts with files and standard input, and what it
-    produces on standard output or standard error.  Omit internals and
-    implementation details unless they're critical for understanding the
-    interface.  Describe the usual case; for information on command-line
-    options of a program use the OPTIONS section.
-
-..  When describing new behavior or new flags for a system call or library
-    function, be careful to note the kernel or C library version that
-    introduced the change.  The preferred method of noting this information
-    for flags is as part of a .TP list, in the following form (here, for a
-    new system call flag):
-
-..
-        XYZ_FLAG (since Linux 3.7)
-                       Description of flag...
-..
-    Including version information is especially useful to users who are
-    constrained to using older kernel or C library versions (which is
-    typical in embed‐ ded systems, for example).
+.. Todo
+   This needs expansion.
 
 OPTIONS
 =======
 
-The **vid** command expects a subcommand. Options available depends on the subcommand given on the command line.
-
-.. TODO
-..
-    describes the command-line options accepted by a program and how they
-    change its behavior.  This section should appear only for Section 1 and
-    8 manual pages.
+The **vid** command expects a subcommand. Options available depends on
+the subcommand given on the command line.
 
 General options
 ---------------
@@ -91,19 +67,21 @@ below for a detailed description of this file's format.
 
 --showinfo, -s   Show timecode information on the output video.
 
---bell, -b       Produce an audible beep when encoding is finished. This can be
-                 useful when encoding takes several minutes.
+--bell, -b       Produce an audible beep when encoding is finished.
+                 This can be useful when encoding takes several minutes.
 
 --output file, -o file
-                 File name to write to. May be given many times. The file
-                 extension determines the video format and codecs. As of now,
-                 these presets are hard-coded in the program, which is not the
-                 right thing to do. The accepted extensions are avi, ogv, and webm.
+                 File name to write to. May be given many times. The
+                 file extension determines the video format and
+                 codecs. As of now, these presets are hard-coded in
+                 the program, which is not the right thing to do. The
+                 accepted extensions are avi, ogv, and webm.
 
 new
 ---
 
-Writes a YAML template to stdout. You may want to redirect output to a file name. For example::
+Writes a YAML template to stdout. You may want to redirect output to a
+file name. For example::
 
     $ vid new > movie.yaml
 
@@ -121,6 +99,14 @@ ENVIRONMENT
 FILES
 =====
 
+..
+    lists the files the program or function uses, such as configuration
+    files, startup files, and files the program directly operates on.  Give
+    the full pathname of these files, and use the installation process to
+    modify the directory part to match user preferences.  For many programs,
+    the default instal‐ lation location is in /usr/local, so your base
+    manual page should use /usr/local as the base.
+
 Vid makes movies by reading a text file in YAML syntax and constructing
 its internal objects from it. The YAML document must have a mapping at
 its root. The accepted keys are listed below. Each values must follow
@@ -132,8 +118,8 @@ meta
     is not checked for sanity but the future-proof recommendation is to make it
     a mapping which keys are a subset of:
 
-    :title: a string
-    :date: a date, yyyy-mm-dd
+    :title:  a string
+    :date:   a date, yyyy-mm-dd
     :author: a string
 
 globals
@@ -141,13 +127,14 @@ globals
     movie unless overridden in a shot description in the movie section. The
     accepted keys are:
 
-    :silent: boolean; if ``true``, you get a silent movie (except for the music).
+    :silent:  boolean; if ``true``, you get a silent movie (except for the music).
     :filters: list; the filters list format is described in the movie section.
     :pattern: string; one way to set the file name pattern.
               See the PATTERN section for details.
 
 music
-    Optional. A string. The file name of your movie's music track. The file must exist.
+    Optional. A string. The file name of your movie's music track. The
+    file must exist.
 
 movie
     Required. A list of shots to concatenate.
@@ -167,8 +154,9 @@ movie
     number (integer or float), it is used as the start position of the
     cut. The default is 0. If the third item is present and is a number,
     it is used as the duration of the cut. Otherwise, the frames from
-    start to the end of file are used. The last item may be a mapping of
-    the following keys:
+    start to the end of file are used.
+
+    The last item may be a mapping of the following keys:
 
     filters
         list. Here are valid syntax examples::
@@ -195,17 +183,9 @@ movie
         string. the highest priority setting for the file path pattern.
 
 multiplexer
-    Optional. Options to pass to the multiplexer that will output the final
-    movie. Currently, the only accepted key is ``filters`` in the same way
-    as shots in the movie section.
-
-..
-    lists the files the program or function uses, such as configuration
-    files, startup files, and files the program directly operates on.  Give
-    the full pathname of these files, and use the installation process to
-    modify the directory part to match user preferences.  For many programs,
-    the default instal‐ lation location is in /usr/local, so your base
-    manual page should use /usr/local as the base.
+    Optional. Options to pass to the multiplexer that affects the final
+    movie. Currently, the only accepted key is ``filters`` described
+    in the movie section.
 
 BUGS
 ====
