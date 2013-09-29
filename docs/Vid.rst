@@ -121,6 +121,84 @@ ENVIRONMENT
 FILES
 =====
 
+Vid makes movies by reading a text file in YAML syntax and constructing
+its internal objects from it. The YAML document must have a mapping at
+its root. The accepted keys are listed below. Each values must follow
+expected specifications which are also described.
+
+meta
+    Optional. Won't actually be used, but may be in a future version of
+    Vid. For now, it may help you organize your files. The value of this key
+    is not checked for sanity but the future-proof recommendation is to make it
+    a mapping which keys are a subset of:
+
+    :title: a string
+    :date: a date, yyyy-mm-dd
+    :author: a string
+
+globals
+    Optional. These keyword parameters will be passed to every shots in the
+    movie unless overridden in a shot description in the movie section. The
+    accepted keys are:
+
+    :silent: boolean; if ``true``, you get a silent movie (except for the music).
+    :filters: list; the filters list format is described in the movie section.
+    :pattern: string; one way to set the file name pattern.
+              See the PATTERN section for details.
+
+music
+    Optional. A string. The file name of your movie's music track. The file must exist.
+
+movie
+    Required. A list of shots to concatenate.
+    Examples of valid shot descriptions::
+
+      - 42
+      - [42]
+      - [42, 4]
+      - [42, 4, 2]
+      - [42, 4, 2, {...}]
+
+    If the item is an integer, it is taken as the number of the footage
+    and the entire clip is used.
+
+    If the item is a list, the first item must be an integer interpreted
+    as the footage number. The if the second item is present and is a
+    number (integer or float), it is used as the start position of the
+    cut. The default is 0. If the third item is present and is a number,
+    it is used as the duration of the cut. Otherwise, the frames from
+    start to the end of file are used. The last item may be a mapping of
+    the following keys:
+
+    filters
+        list. Here are valid syntax examples::
+
+            - filtername       # A simple string.
+            - [filtername]     # A list of 1 element, the filter name as str.
+            - [filtername, {}]
+            - [filtername, ~]  # ~ is null in YAML.
+            - [filtername, {key: value, …}]
+                # where keys are strings and
+                # values are strings, integers or floating point numbers.
+                # Values are properly escaped before being passed to ffmpeg.
+                # You only need to do YAML syntax escaping.
+        see ``man 1 ffmpeg-filters`` for details about ffmpeg filters.
+        you can use any of them in vid. Vid also has preset filters hard-coded
+        in the program.
+
+.. TODO
+   This is not finished.
+
+    silent
+        boolean. Overrides the same key in the globals section.
+    pattern
+        string. the highest priority setting for the file path pattern.
+
+multiplexer
+    Optional. Options to pass to the multiplexer that will output the final
+    movie. Currently, the only accepted key is ``filters`` in the same way
+    as shots in the movie section.
+
 ..
     lists the files the program or function uses, such as configuration
     files, startup files, and files the program directly operates on.  Give
