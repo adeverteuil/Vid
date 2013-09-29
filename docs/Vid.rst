@@ -288,11 +288,20 @@ a constant to ``x`` and ``y``, in which case ``x1``, ``x2`` and ``y1``,
 BUGS
 ====
 
-.. TODO talk about how 100 ffmpeg subprocesses are spawned if the yaml
-   file lists 50 clips
-..
-    lists limitations, known defects or inconveniences, and other
-    questionable activities.
+* There is currently no control on computer resources usage. Two ffmpeg
+  subprocesses are spawned for every shot the movie comprises. If there
+  are 50 shots, there will be at least 100 subprocess.
+
+  To see what I mean, run ``watch -d -n .2 ps -HC vid,ffmpeg -o
+  pid,time,args`` in a terminal when Vid is concatenating a movie.
+
+  I intend to limit the number of running subprocesses in the queue.
+
+* There are hard-coded values that should be configurable by the user.
+
+  - The default fontfile for drawtext filters;
+  - The output video formats.
+
 ..
     Talk about the hard-coded values that should be configurable.
 
@@ -327,5 +336,4 @@ The source code is available on GitHub at <http://github.com/adeverteuil/Vid>.
 TODO
 ====
     * Talk about the *pattern*.
-    * Talk about the timecode with **play** and **yaml -s**.
     * Talk about the workflow.
