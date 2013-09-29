@@ -25,6 +25,7 @@ Goals
 * As few dependencies_ as possible;
 * Basic editing capabilities (concatenation, titles, music);
 * Editing fast using a text editor;
+* Learn about ffmpeg, codecs and formats;
 * Advocate free (as in free speech) codecs and software.
 
 .. _dependencies: Requirements_
@@ -36,7 +37,8 @@ Features
 * Use the ``vid`` command to preview movie shots and write output to disk;
 * Encode in Ogg/Theora/Vorbis or WebM/VP8/Vorbis;
 * Mix in music;
-* Preset FFMpeg filters to add text and rolling credits.
+* Preset FFMpeg filters to add text and rolling credits;
+* No intermediary files; all processing is done in memory though streams, buffers and pipes.
 
 .. _YAML: http://en.wikipedia.org/wiki/Yaml
 
