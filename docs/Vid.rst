@@ -75,7 +75,7 @@ General options
 play
 ----
 
-This command requires a *file_number* argument. It will find the
+This subcommand requires a *file_number* argument. It will find the
 required file by putting the file_number in the *pattern* (see PATTERN below)
 and will play it with ffplay.
 
