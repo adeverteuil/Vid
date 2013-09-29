@@ -65,7 +65,8 @@ yaml
 This subcommand requires a *yaml_file* argument. See the FILES section
 below for a detailed description of this file's format.
 
---showinfo, -s   Show timecode information on the output video.
+--showinfo, -s   Show timecode information on the output video. For more
+                 information, see ``movingtext`` in PRESET FILTERS.
 
 --bell, -b       Produce an audible beep when encoding is finished.
                  This can be useful when encoding takes several minutes.
@@ -166,16 +167,18 @@ movie
             - [filtername, {}]
             - [filtername, ~]  # ~ is null in YAML.
             - [filtername, {key: value, …}]
-                # where keys are strings and
-                # values are strings, integers or floating point numbers.
-                # Values are properly escaped before being passed to ffmpeg.
-                # You only need to do YAML syntax escaping.
-        see ``man 1 ffmpeg-filters`` for details about ffmpeg filters.
-        you can use any of them in vid. Vid also has preset filters hard-coded
-        in the program.
+                # where keys are strings and values are strings,
+                # integers or floating point numbers. Vid takes care of
+                # properly escaping values passed to ffmpeg. Thus you
+                # only need to worry about YAML syntax escaping.
 
-.. TODO
-   This is not finished.
+        See ``man 1 ffmpeg-filters`` for details about ffmpeg filters.
+        You can use any of them in vid. Vid also has preset filters hard-coded
+        in the program. See PRESET FILTERS.
+
+        Filters that do not take arguments, or those for which the
+        defaults are fine for your needs, may be specified in one of the
+        first 4 forms in the example above.
 
     silent
         boolean. Overrides the same key in the globals section.
@@ -187,6 +190,101 @@ multiplexer
     movie. Currently, the only accepted key is ``filters`` described
     in the movie section.
 
+PRESET FILTERS
+==============
+
+drawtext
+--------
+
+Vid overrides FFMpeg's defaults for the drawtext filter. The following parameters'
+default values are modified:
+
+:fontfile:  "/usr/share/fonts/TTF/ttf-inconsolata.otf". It is hard-coded in the
+            program. This is wrong and should be changed in the future. The author
+            finds this font pretty but it will be ignored if this file is not
+            found on the user's system.
+:fontcolor: "white"
+:fontsize:  25
+:boxcolor:  "0x000000aa". i.e. black with transparency. Note that it is
+            not enabled unless the ``box`` argument is explicitely set to 1.
+
+showdata
+--------
+
+When the ``-s`` option is passed to the ``yaml`` subcommand, or when the
+``play`` command is used, this filter is added to all shots and to the
+multiplexer.
+
+It is also possible to add this filter in the YAML file, though it is
+not the usual workflow
+
+This filter does not take any arguments.
+
+This filter is a preset for two sets of two drawtext filters:
+
+1. Timecode and other data. There is a bottom left text and a top right text.
+
+   The bottom left text shows information about the current shot in the movie:
+   the source timecode in seconds, the frame number, and the file name.
+
+   The top right text shows information about the output stream: the timecode
+   in seconds and, when available, the total length.
+
+2. A cursor (a chevron ">") indicating the current position in the
+   sream. The cursor moves from the left border to the right border. There
+   is one at the top of the frame and one at the bottom.
+
+   The top cursor indicates the position in the output stream. It is
+   very useful in ffplay because a mouse click in the frame seeks to the
+   percentage in the file corresponding to the fraction of the width,
+   and without this cursor, it's impossible to see what the current
+   position is.
+
+   The bottom cursor indicates the source position from each of the shots
+   in the movie.
+
+movingtext
+----------
+
+This is a preset for the drawtext filter which adds parameters to make drawing of
+gliding text easy.
+
+The new parameters and their default values are:
+
+:x1: 20
+:y1: "h"
+:t1: 0
+:x2: 20
+:y2: "-text_h"
+:t2: 3
+:text: "undefined text"
+
+These define a (x, y) position in 2D at timecodes t1 and t2. By default, text
+crosses the frame from bottom to top from timecode 0 to 3 seconds.
+
+The ``x`` and ``y`` parameters passed to the drawtext filter in FFMpeg
+are the two-point form of the linear equation with the variables
+substituted with the values defined above. It is also possible to assign
+a constant to ``x`` and ``y``, in which case ``x1``, ``x2`` and ``y1``,
+``y2`` will be ignored.
+
+.. note::
+   When the ``movingtext`` preset is used on a shot, timecodes are relative to
+   the beginning of the original file, not the seek position of the cut. This is
+   not a problem when ``movingtext`` is used in the ``multiplexer`` section.
+
+   For example, if a shot is defined as such::
+
+     - [42, 107, 40,
+         {filters:
+           [
+             [movingtext, {t1: 0, t2: 10, text: Hi!}]
+       ]}]
+
+   ...the text would never be seen because the cut starts at timecode
+   107 but the text exits the frame at timecode 10. The user should have
+   assigned the values 107 and 117 to ``t1`` and ``t2`` respectively.
+
 BUGS
 ====
 
@@ -195,6 +293,8 @@ BUGS
 ..
     lists limitations, known defects or inconveniences, and other
     questionable activities.
+..
+    Talk about the hard-coded values that should be configurable.
 
 EXAMPLE
 =======
