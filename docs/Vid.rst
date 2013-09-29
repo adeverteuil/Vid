@@ -17,15 +17,15 @@ A CLI video editor
 SYNOPSIS
 ========
 
-``vid`` ``-h``
+vid -h
 
-``vid`` ``play`` [``-h``] *file_number* [*seek*] [*duration*]
-[``-o`` *OUTPUT* [``-o`` *OUTPUT*] ...]
+vid play [-h] [-p *PATTERN*] *file_number* [*seek*] [*duration*]
+[-o *OUTPUT* [-o *OUTPUT*] ...]
 
-``vid`` ``yaml`` [``-h``] *yaml_file* [``-b``] [``-s``]
-[``-o`` *OUTPUT* [``-o`` *OUTPUT*] ...]
+vid yaml [-h] [-p *PATTERN*] *yaml_file* [-b] [-s]
+[-o *OUTPUT* [-o *OUTPUT*] ...]
 
-``vid`` ``new`` [``-h``]
+vid new [-h] [-p *PATTERN*]
 
 DESCRIPTION
 ===========
@@ -47,6 +47,10 @@ General options
 
 --help, -h     Print usage text. May be used after a subcommand for a
                specific usage for this subcommand.
+
+--pattern PATTERN, -p PATTERN
+               The file path name pattern, used to find movie files by number.
+               See pattern in the CONFIGURATION section below.
 
 play
 ----
