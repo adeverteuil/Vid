@@ -39,7 +39,7 @@ keyboard interrupt signal (SIGINT) or if a pipe unexpectedly breaks
 exiting its ffplay subprocess by pressing ``q`` while ffplay has the
 focus.
 
-.. Todo
+.. TODO
    This needs expansion.
 
 OPTIONS
@@ -103,6 +103,8 @@ YAML syntax specific to Vid.
 ENVIRONMENT
 ===========
 
+TODO
+
 ..
     lists all environment variables that affect the program or function and
     how they affect it.
@@ -110,13 +112,18 @@ ENVIRONMENT
 FILES
 =====
 
-..
+TODO
+
+..  from the man-pages man page:
     lists the files the program or function uses, such as configuration
     files, startup files, and files the program directly operates on.  Give
     the full pathname of these files, and use the installation process to
     modify the directory part to match user preferences.  For many programs,
     the default instal‐ lation location is in /usr/local, so your base
     manual page should use /usr/local as the base.
+
+PROJECT FILES
+=============
 
 Vid makes movies by reading a text file in YAML syntax and constructing
 its internal objects from it. The YAML document must have a mapping at
@@ -321,16 +328,10 @@ BUGS
   - The default fontfile for drawtext filters;
   - The output video formats.
 
-..
-    Talk about the hard-coded values that should be configurable.
-
 EXAMPLE
 =======
 
-..
-    provides one or more examples describing how this function, file or
-    command is used.  For details on writing example programs, see Example
-    Programs below.
+TODO
 
 SEE ALSO
 ========
@@ -339,18 +340,6 @@ For examples of videos created with Vid, visit the author's blog at
 <http://alexandre.deverteuil.net/blogue>.
 
 The source code is available on GitHub at <http://github.com/adeverteuil/Vid>.
-
-..
-    provides a comma-separated list of related man pages, ordered by section
-    number and then alphabetically by name, possibly followed by other
-    related pages or documents.  Do not terminate this with a period.
-
-..
-    Where the SEE ALSO list contains many long manual page names, to improve
-    the visual result of the output, it may be useful to employ the .ad l
-    (don't right justify) and .nh (don't hyphenate) directives.  Hyphenation
-    of individual page names can be prevented by preceding words with the
-    string "\%".
 
 TODO
 ====
