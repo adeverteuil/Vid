@@ -79,7 +79,9 @@ This subcommand requires a *file_number* argument. It will find the
 required file by putting the file_number in the *pattern* (see PATTERN below)
 and will play it with ffplay.
 
---output file, -o file    Write to *file* instead of piping to ffplay
+--output file, -o file    Write to *file* instead of piping to ffplay. The
+                          file format is controlled the same way as with
+                          the yaml subcommand (see below).
 
 yaml
 ----
