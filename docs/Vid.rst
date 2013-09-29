@@ -33,6 +33,12 @@ DESCRIPTION
 Vid is a CLI video editor written in Python which uses ffmpeg in the
 background. Because editing video in a terminal is bad-ass.
 
+Vid will stop its current tasks, cleanup and exit if it catches the
+keyboard interrupt signal (SIGINT) or if a pipe unexpectedly breaks
+(SIGPIPE). Therefore, you may exit Vid by sending ``^C`` (Ctrl+C) or by
+exiting its ffplay subprocess by pressing ``q`` while ffplay has the
+focus.
+
 .. Todo
    This needs expansion.
 
