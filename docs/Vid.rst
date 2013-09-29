@@ -117,6 +117,15 @@ its internal objects from it. The YAML document must have a mapping at
 its root. The accepted keys are listed below. Each values must follow
 expected specifications which are also described.
 
+For more information about the YAML syntax, see
+http://www.yaml.org/spec/1.2/spec.html#Preview.
+
+.. note::
+    Optional keys at the root of the document may take a null value.
+    For example::
+
+      globals: null
+
 meta
     Optional. Won't actually be used, but may be in a future version of
     Vid. For now, it may help you organize your files. The value of this key
