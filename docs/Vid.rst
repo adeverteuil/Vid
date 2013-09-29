@@ -84,6 +84,20 @@ and will play it with ffplay.
 yaml
 ----
 
+This subcommand requires a *yaml_file* argument. See the FILES section
+below for a detailed description of this file's format.
+
+--showinfo, -s   Show timecode information on the output video.
+
+--bell, -b       Produce an audible beep when encoding is finished. This can be
+                 useful when encoding takes several minutes.
+
+--output file, -o file
+                 File name to write to. May be given many times. The file
+                 extension determines the video format and codecs. As of now,
+                 these presets are hard-coded in the program, which is not the
+                 right thing to do. The accepted extensions are avi, ogv, and webm.
+
 new
 ---
 
