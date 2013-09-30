@@ -125,6 +125,48 @@ second sequence will take video/audio from the same file starting at
 timestamp 00:00:10 until the end of the file. The third sequence is the
 entire M2U00023.mpg file.
 
+Status
+------
+
+Vid is currently in alpha stage. It is actively developped (in my rare
+free time) and any option, behavior, file structure may change at any
+time.
+
+I am working on code documentation and the user manual page.
+
+Roadmap
+-------
+
+Here are a few things I'd like to get done before I officially announce version 1.0:
+
+* Have docstrings adhering to `PEP257`_;
+* Have a nice manual page (work in progress, still has TODOs in there);
+* Eliminate hard-coded values, or at least allow them to be configured by the user;
+* Write nice working examples with usable video files;
+* Test the program with different source video formats, although this won't prevent me from releasing v1.0;
+* Maybe produce installable packages for ArchLinux and other popular distros?
+
+These are just links for my reference and food for thought:
+
+* `How to Turn Your Pile of Code into an Open Source Project`__
+* `13 Things People Hate about Your Open Source Docs`__
+
+.. _`PEP257`: http://www.python.org/dev/peps/pep-0257/
+.. __: http://blog.smartbear.com/open-source/how-to-turn-your-pile-of-code-into-an-open-source-project/
+.. __: http://blog.smartbear.com/careers/13-things-people-hate-about-your-open-source-docs/
+
+Contributing
+------------
+
+Pelican's `contribution guidelines`_ are good for me, although Vid's
+code only supports Python 3.
+
+Pull requests are welcome, as well as constructive criticism about any
+aspect of the project. If you tried it, I'd like to hear about it! This
+is a learning process for me.
+
+.. _`contribution guidelines`: http://pelican.readthedocs.org/en/3.3.0/contribute.html
+
 Contact information
 -------------------
 
