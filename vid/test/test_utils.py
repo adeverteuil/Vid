@@ -377,8 +377,8 @@ class UtilsTestCase(unittest.TestCase):
         # Add filter "showdata" for Shot and Multiplexer.
         # Add filter "movingtext" for Shot and Multiplexer.
         l = 2
-        shot = Shot(54).cut(3, l).add_filter("showdata")
-        shot.add_filter(
+        shot = Shot(54).cut(3, l).append_vf("showdata")
+        shot.append_vf(
             "movingtext",
             text="MOVING TEXT",
             t1=3,
@@ -386,8 +386,8 @@ class UtilsTestCase(unittest.TestCase):
             )
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
-        muxer.add_filter("showdata", length=l)
-        muxer.add_filter(
+        muxer.append_vf("showdata", length=l)
+        muxer.append_vf(
             "movingtext",
             t2=l,
             x2="w-text_w",
@@ -411,7 +411,7 @@ class UtilsTestCase(unittest.TestCase):
         shot = Shot(54).cut(0, 1)
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
-        muxer.add_filter("showdata")
+        muxer.append_vf("showdata")
         with tempfile.TemporaryDirectory() as tmpd:
             file1 = os.path.join(tmpd, "test.ogv")
             file2 = os.path.join(tmpd, "test.webm")
@@ -505,11 +505,11 @@ class UtilsTestCase(unittest.TestCase):
         shot.a_stream.close()
         self.assertEqual(len(sound), len(silence))
 
-    def test_add_filter(self):
-        logger = logging.getLogger(__name__+".test_add_filter")
-        logger.debug("Testing Shot.add_filter()")
-        shot = Shot(54).cut(4, 5).add_filter("showdata")
-        shot.add_filter(
+    def test_append_filter(self):
+        logger = logging.getLogger(__name__+".test_append_filter")
+        logger.debug("Testing Shot.append_vf() and Shot.append_af()")
+        shot = Shot(54).cut(4, 5).append_vf("showdata")
+        shot.append_vf(
             "drawtext",
             x="w/2-text_w/2",
             y="h/2-text_h/2",
@@ -521,6 +521,7 @@ class UtilsTestCase(unittest.TestCase):
             box="1",
             boxcolor="0x000000aa",
             )
+        shot.append_af("volume", volume=0.3)
         shot.demux()
         multiplexer = Multiplexer(shot.v_stream, shot.a_stream)
         player = Player(multiplexer.mux())
@@ -531,7 +532,7 @@ class UtilsTestCase(unittest.TestCase):
 
     def test_audioprocessing_mix(self):
         logger = logging.getLogger(__name__+".test_audioprocessing_mix")
-        logger.debug("Testing Shot.add_filter()")
+        logger.debug("Testing AudioProcessing()")
         shot = Shot(54).cut(4, 5)
         shot.demux()
         mixer = AudioProcessing(shot.a_stream)
@@ -549,7 +550,7 @@ class UtilsTestCase(unittest.TestCase):
             self.assertEqual(v, 0, msg="Return codes: {}".format(returncodes))
 
     def test_probe_duration(self):
-        logger = logging.getLogger(__name__+".test_audioprocessing_mix")
-        logger.debug("Testing Shot.add_filter()")
+        logger = logging.getLogger(__name__+".test_probe_duration")
+        logger.debug("Testing Probe().get_duration()")
         probe = Probe("footage/testsequence/M2U00054.mpg")
         self.assertIsInstance(probe.get_duration(), float)

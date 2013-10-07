@@ -136,7 +136,13 @@ class YAMLTestCase(unittest.TestCase):
             with self.assertRaises(KeyError):
                 reader._check_globals({'foo': "Not a Shot constructor kwarg."})
             with self.assertRaises(TypeError):
+                reader._check_globals({'vf': "string instead of list"})
+            with self.assertRaises(TypeError):
+                reader._check_globals({'af': "string instead of list"})
+            with self.assertRaises(TypeError):
                 reader._check_globals({'filters': "string instead of list"})
+            with self.assertRaises(KeyError):
+                reader._check_globals({'vf': ["test"], 'filters': ["foo"]})
             with self.assertRaises(TypeError):
                 reader._check_globals({'silent': "string instead of bool"})
             with self.assertRaises(TypeError):
@@ -145,7 +151,7 @@ class YAMLTestCase(unittest.TestCase):
                 reader._check_globals(
                     {'pattern': "test", 'silent': False, 'filters': ["test"]}
                     ),
-                {'pattern': "test", 'silent': False, 'filters': [["test", {}]]}
+                {'pattern': "test", 'silent': False, 'vf': [["test", {}]]}
                 )
 
             # Test _check_music()
@@ -168,7 +174,7 @@ class YAMLTestCase(unittest.TestCase):
                 reader._check_multiplexer({'foo': 4})
             self.assertEqual(
                 reader._check_multiplexer({'filters': [["showinfo", {}]]}),
-                {'filters': [["showinfo", {}]]}
+                {'vf': [["showinfo", {}]]}
                 )
 
             # Test _check_shot()
@@ -200,7 +206,7 @@ class YAMLTestCase(unittest.TestCase):
                     [1, {}],
                     [1, {}],
                     [1, 2, 3, {}],
-                    [2, {'filters': [["a", {}]]}]
+                    [2, {'vf': [["a", {}]]}]
                 ]
                 )
 
@@ -236,6 +242,9 @@ class YAMLTestCase(unittest.TestCase):
                     "  filters:\n"
                     "    - - movingtext\n"
                     "      - text: This is a test\n"
+                    "  af:\n"
+                    "    - - volume\n"
+                    "      - volume: .3\n"
                     "music: {file}\n"
                     "globals: ~\n"
                     "meta: ~\n"
@@ -247,11 +256,9 @@ class YAMLTestCase(unittest.TestCase):
                         [4, 1, 10.25, {}]
                         ],
                     'multiplexer': {
-                        'filters': [["movingtext", {'text': "This is a test"}]],
+                        'vf': [["movingtext", {'text': "This is a test"}]],
+                        'af': [["volume", {'volume': 0.3}]],
                         },
                     'music': n.name,
                     }
-                self.assertEqual(
-                    reader.load(data),
-                    canonical
-                    )
+                self.assertEqual(reader.load(data), canonical)
