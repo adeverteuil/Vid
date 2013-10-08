@@ -143,10 +143,10 @@ def play(args):                                  #{{{1
             args.file_number, args.seek, args.duration,
             pattern=args.pattern or DEFAULT_PATTERN,
             )
-        shot.add_filter("showdata")
+        shot.append_vf("showdata")
         shot.demux()
         muxer = Multiplexer(shot.v_stream, shot.a_stream)
-        muxer.add_filter("showdata", length=shot.get_duration())
+        muxer.append_vf("showdata", length=shot.get_duration())
         if args.output:
             print("Output:", args.output)
             try:
@@ -210,7 +210,7 @@ def play_yaml(options):                          #{{{1
             args.append(arg)
         shot = Shot(*args, **kwargs)
         if options.showinfo:
-            shot.add_filter("showdata")
+            shot.append_vf("showdata")
         print(shot)
         q.put(shot)
         length += shot.get_duration()
@@ -218,11 +218,15 @@ def play_yaml(options):                          #{{{1
     q.put(None)
     cat.start()
     print("Output:", options.output or "stream into player")
-    if 'multiplexer' in data and 'filters' in data['multiplexer']:
-        for filter in data['multiplexer']['filters']:
-            muxer.add_filter(filter[0], **filter[1])
+    if 'multiplexer' in data:
+        if 'vf' in data['multiplexer']:
+            for filter in data['multiplexer']['vf']:
+                muxer.append_vf(filter[0], **filter[1])
+        if 'af' in data['multiplexer']:
+            for filter in data['multiplexer']['af']:
+                muxer.append_af(filter[0], **filter[1])
     if options.showinfo:
-        muxer.add_filter("showdata", length=length)
+        muxer.append_vf("showdata", length=length)
     if options.output:
         start_time = time.perf_counter()
         muxer.write_to_files(*options.output)

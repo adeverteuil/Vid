@@ -63,6 +63,9 @@ movie:
   # followed by a mapping of keyword arguments.
   # Only the first positional argument is required.
   #
+  # Arguments "filters" and "vf" are equivalent and mutually exclusive.
+  # For audio filters, use "af".
+  #
   # - [42, 4, 2]
   # - [ !!int id, !!int start, !!int duration,
   #     "filters": [
@@ -84,8 +87,8 @@ movie:
   # - - [42, 4, 2, {{filters: [[drawtext, {{x: 10, y: 10, text: My title}}]]}}]
 multiplexer:
   filters:
-    # A mapping of filters to give as the filter
-    # keyword argument to the Multiplexer object.
+    # A mapping of video filters to give as the filter keyword argument
+    # to the Multiplexer object. For audio filters, use "af".
     - - movingtext
       - t1: 1
         t2: 10
@@ -211,12 +214,25 @@ class YAMLReader():                              #{{{1
         if isinstance(data[-1], dict):
             kwargs = data.pop()
             if 'filters' in kwargs:
-                filters = []
-                for f in kwargs['filters']:
-                    filters.append(
+                if 'vf' in kwargs:
+                    reason = "Must use only one of \"filters\" or \"vf\"."
+                    raise KeyError(error_msg+reason)
+                kwargs['vf'] = kwargs['filters']
+                del kwargs['filters']
+            if 'vf' in kwargs:
+                vf = []
+                for f in kwargs['vf']:
+                    vf.append(
                         self._check_filter(f, where)
                         )
-                kwargs.update({'filters': filters})
+                kwargs.update({'vf': vf})
+            if 'af' in kwargs:
+                af = []
+                for f in kwargs['af']:
+                    af.append(
+                        self._check_filter(f, where)
+                        )
+                kwargs.update({'af': af})
         else:
             kwargs = {}
         if not 1 <= len(data) <= 3:
@@ -232,7 +248,7 @@ class YAMLReader():                              #{{{1
         """
         if data is None:
             return
-        valid_keys = {'filters'}
+        valid_keys = {'filters', 'vf', 'af'}
         if not set(data) <= set(valid_keys):
             invalid_keys = set(data) - set(valid_keys)
             if len(invalid_keys) == 1:
@@ -244,14 +260,32 @@ class YAMLReader():                              #{{{1
                 + pluralize
                 )
         if 'filters' in data:
-            if not isinstance(data['filters'], list):
+            if 'vf' in data:
+                raise KeyError(
+                    "Multiplexer arguments \"filters\" and \"vf\" are "
+                    "synonyms and mutually exclusive."
+                    )
+            else:
+                data['vf'] = data['filters']
+                del data['filters']
+        if 'vf' in data:
+            if not isinstance(data['vf'], list):
                 raise ValueError("Multiplexer filters must be a list.")
             sane_filters = []
-            for filter in data['filters']:
+            for filter in data['vf']:
                 sane_filters.append(
                     self._check_filter(filter, ["multiplexer"])
                     )
-            data['filters'] = sane_filters
+            data['vf'] = sane_filters
+        if 'af' in data:
+            if not isinstance(data['af'], list):
+                raise ValueError("Multiplexer filters must be a list.")
+            sane_filters = []
+            for filter in data['af']:
+                sane_filters.append(
+                    self._check_filter(filter, ["multiplexer"])
+                    )
+            data['af'] = sane_filters
         return data
 
     def _check_music(self, data):
@@ -278,8 +312,12 @@ class YAMLReader():                              #{{{1
         if data is None:
             return
         valid_keys = {
+            #FIXME required type is given here but validation is hard-coded
+            # further down.
             'silent': bool,
             'filters': list,
+            'vf': list,
+            'af': list,
             'pattern': str,
             }
         if not isinstance(data, dict):
@@ -298,12 +336,27 @@ class YAMLReader():                              #{{{1
                 + pluralize
                 )
         if 'filters' in data:
-            if not isinstance(data['filters'], list):
+            if 'vf' in data:
+                raise KeyError(
+                    "Global section has both \"filters\" and \"vf\" "
+                    "arguments. Please use only one of those."
+                    )
+            data['vf'] = data['filters']
+            del data['filters']
+        if 'vf' in data:
+            if not isinstance(data['vf'], list):
                 raise TypeError("Global filters must be a list.")
             sane_filters = []
-            for filter in data['filters']:
+            for filter in data['vf']:
                 sane_filters.append(self._check_filter(filter, ["globals"]))
-            data['filters'] = sane_filters
+            data['vf'] = sane_filters
+        if 'af' in data:
+            if not isinstance(data['af'], list):
+                raise TypeError("Global filters must be a list.")
+            sane_filters = []
+            for filter in data['af']:
+                sane_filters.append(self._check_filter(filter, ["globals"]))
+            data['af'] = sane_filters
         if 'silent' in data and not isinstance(data['silent'], bool):
             raise TypeError("\"silent\" value in \"globals\" must be boolean.")
         if 'pattern' in data and not isinstance(data['pattern'], str):

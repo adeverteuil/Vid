@@ -511,22 +511,39 @@ class FFmpegWrapper():                           #{{{1
     """Provides utilities for subclasses that spawn ffmpeg subprocesses."""
 
     def __init__(self):
-        self.filters = []
+        self.vf = []
+        self.af = []
 
-    def _format_filters(self):
-        """Build filter string for ffmpeg argument.
+    def _format_vf(self):
+        """Build video filter string for ffmpeg argument.
 
         Make this happen:
-        ["-filter:v", "name,name=k=v,name=k=v:k=v:k=v"]
+        "-filter:v", "name,name=k=v,name=k=v:k=v:k=v"
         """
-        if not self.filters:
+        if not self.vf:
             return []
         self.logger.debug(
-            "Processing filters {}.".format(self.filters)
+            "Processing video filters. {}.".format(self.vf)
             )
-        returnvalue = []
+        return ["-filter:v", self._escape_filterchain(self.vf)]
+
+    def _format_af(self):
+        """Build video filter string for ffmpeg argument.
+
+        Make this happen:
+        "-filter:a", "name,name=k=v,name=k=v:k=v:k=v"
+        """
+        if not self.af:
+            return []
+        self.logger.debug(
+            "Processing audio filters. {}.".format(self.af)
+            )
+        return ["-filter:a", self._escape_filterchain(self.af)]
+
+    def _escape_filterchain(self, f):
+        """Convert  dict into an escaped string for ffmpeg filter arguments."""
         filterchain = []
-        for filter in self.filters:
+        for filter in f:
             name = filter[0]
             args = filter[1]
             if args:
@@ -545,12 +562,13 @@ class FFmpegWrapper():                           #{{{1
             else:
                 string = name
             filterchain.append(string)
-        returnvalue.append(",".join(filterchain))
-        return ["-filter:v"] + returnvalue
+        return ",".join(filterchain)
 
-    def add_filter(self, filtername, **kwargs):
+    def append_vf(self, filtername, **kwargs):
         self.logger.debug(
-            "Adding filter {} with options {}.".format(filtername, kwargs)
+            "Adding video filter {} with options {}.".format(
+                filtername, kwargs
+                )
             )
         if filtername == "movingtext":
             # By default, text crosses the frame from bottom to top
@@ -585,7 +603,16 @@ class FFmpegWrapper():                           #{{{1
                 }
             defaults.update(kwargs)
             kwargs = defaults
-        self.filters.append((filtername, kwargs))
+        self.vf.append((filtername, kwargs))
+        return self
+
+    def append_af(self, filtername, **kwargs):
+        self.logger.debug(
+            "Adding audio filter {} with options {}.".format(
+                filtername, kwargs
+                )
+            )
+        self.af.append((filtername, kwargs))
         return self
 
 
@@ -599,8 +626,8 @@ class Shot(FFmpegWrapper):                       #{{{1
 
     This is the simplest building block for a movie.
     """
-    def __init__(self, number, seek=0, dur=None, filters=None, silent=False,
-                 pattern=DEFAULT_PATTERN):
+    def __init__(self, number, seek=0, dur=None, vf=None, af=None,
+                 silent=False, pattern=DEFAULT_PATTERN):
         self.logger = logging.getLogger(__name__+".Shot")
         self.number = int(number)
         try:
@@ -619,10 +646,14 @@ class Shot(FFmpegWrapper):                       #{{{1
         self.v_stream = None
         self.a_stream = None
         self.silent = silent
-        self.filters = [("yadif", {})]  # Always deinterlace.
-        if filters is not None:
-            for filter in filters:
-                self.add_filter(filter[0], **filter[1])
+        self.vf = [("yadif", {})]  # Always deinterlace.
+        self.af = []
+        if vf is not None:
+            for filter in vf:
+                self.append_vf(filter[0], **filter[1])
+        if af is not None:
+            for filter in af:
+                self.append_af(filter[0], **filter[1])
         self._probe = Probe(self.name)
 
     def __repr__(self):
@@ -698,7 +729,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                     v_args += ["-ss", str(seek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
-                v_args += self._format_filters()
+                v_args += self._format_vf()
                 v_args += RAW_VIDEO + ["-an", "pipe:{}".format(video1_w)]
                 t.start()
             else:
@@ -715,7 +746,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                     v_args += ["-ss", str(seek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
-                v_args += self._format_filters()
+                v_args += self._format_vf()
                 v_args += RAW_VIDEO + ["-an", "pipe:{}".format(video_w)]
             returnvalue.append(self.v_stream)
 
@@ -754,6 +785,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                     a_args += ["-ss", str(seek)]
                 if self.dur:
                     a_args += ["-t", str(self.dur)]
+                a_args += self._format_af()
                 a_args += RAW_AUDIO + ["-vn", "pipe:{}".format(audio1_w)]
                 t.start()
             else:
@@ -770,6 +802,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                     a_args += ["-ss", str(seek)]
                 if self.dur:
                     a_args += ["-t", str(self.dur)]
+                a_args += self._format_af()
                 a_args += RAW_AUDIO + ["-vn", "pipe:{}".format(audio_w)]
             returnvalue.append(self.a_stream)
 
@@ -818,14 +851,22 @@ class Shot(FFmpegWrapper):                       #{{{1
         self.silent = True
         return self
 
-    def add_filter(self, filtername, **kwargs):
+    def append_vf(self, filtername, **kwargs):
+        """Append a video filter to the video stream filtergraph.
+
+        Provides preset filter "showdata" and calls parent class'
+        append_vf method.
+
+        """
         self.logger.debug(
-            "Adding filter {} with options {}.".format(filtername, kwargs)
+            "Adding video filter {} with options {}.".format(
+                filtername, kwargs
+                )
             )
         if filtername == "showdata":
             # Add a gliding cursor which indicates the current position
             # along the bottom of the frame.
-            self.add_filter(
+            self.append_vf(
                 "drawtext",
                 x="t/{length}*w".format(length=self._probe.get_duration()),
                 y="h-text_h",
@@ -834,7 +875,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                 shadowcolor="black",
                 shadowx="2",
                 )
-            self.add_filter(
+            self.append_vf(
                 "drawtext",
                 text="%{{pts}}    %{{n}}\n{}".format(self.name),
                 y="h-text_h-20",
@@ -842,7 +883,7 @@ class Shot(FFmpegWrapper):                       #{{{1
                 box="1",
                 )
         else:
-            super().add_filter(filtername, **kwargs)
+            super().append_vf(filtername, **kwargs)
         return self
 
 
@@ -913,7 +954,8 @@ class Multiplexer(FFmpegWrapper):                #{{{1
             format = OUTPUT_FORMATS[format]
         else:
             assert isinstance(format, list)
-        args = self._args + self._format_filters() + format + ["pipe:1"]
+        args = (self._args + self._format_vf() + self._format_af() +
+                format + ["pipe:1"])
         self.process = subprocess.Popen(
             args,
             stdin=subprocess.DEVNULL,
@@ -955,13 +997,13 @@ class Multiplexer(FFmpegWrapper):                #{{{1
         outputs = []
         for file in files:
             if isinstance(file, tuple):
-                outputs += self._format_filters()
+                outputs += self._format_vf() + self._format_af()
                 outputs += file[1]
                 outputs.append(file[0])
             else:
                 assert isinstance(file, str)
                 ext = file.rsplit('.', 1)[-1]
-                outputs += self._format_filters()
+                outputs += self._format_vf() + self._format_af()
                 outputs += OUTPUT_FORMATS[ext]
                 outputs.append(file)
         args = self._args + outputs
@@ -998,7 +1040,7 @@ class Multiplexer(FFmpegWrapper):                #{{{1
             except AttributeError:
                 return None
 
-    def add_filter(self, filtername, **kwargs):
+    def append_vf(self, filtername, **kwargs):
         self.logger.debug(
             "Adding filter {} with options {}.".format(filtername, kwargs)
             )
@@ -1008,7 +1050,7 @@ class Multiplexer(FFmpegWrapper):                #{{{1
                 t = "/{:.6f}".format(kwargs['length'])
                 # Add a gliding cursor which indicates the current position
                 # along the top of the frame.
-                self.add_filter(
+                self.append_vf(
                     "drawtext",
                     x="t/{length}*w".format(length=kwargs['length']),
                     text=">",
@@ -1019,7 +1061,7 @@ class Multiplexer(FFmpegWrapper):                #{{{1
                 del kwargs['length']
             except KeyError:
                 t = ""
-            super().add_filter(
+            super().append_vf(
                 "drawtext",
                 text="%{{pts}}{}".format(t),
                 y="20",
@@ -1027,7 +1069,7 @@ class Multiplexer(FFmpegWrapper):                #{{{1
                 box="1",
                 )
         else:
-            super().add_filter(filtername, **kwargs)
+            super().append_vf(filtername, **kwargs)
         return self
 
 class AudioProcessing():                         #{{{1
