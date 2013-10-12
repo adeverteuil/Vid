@@ -557,6 +557,7 @@ class FFmpegWrapper():                           #{{{1
                 +- filter            "[]="
                    +- arguments      "'\\:" <- Quoting happens at this level.
                       +- libavutil   "'\\"
+                         +- command line (python, bash, etc.)
 
         Quoting avoids the necessity of escaping characters which are special
         to higher levels of parsing.
@@ -565,9 +566,9 @@ class FFmpegWrapper():                           #{{{1
 
         1) Convert all filter argument values to strings;
         2) Escape the escape character "\\" (libavutil level);
-        3) Escape the arguments special characters ":" and "\\"
+        3) Escape the arguments special characters ":", "'" and "\\";
         4) Unquote and escape literal quotes (libavutil level);
-        5) Surround the string with unescaped quotes;
+        5) Surround the string with unescaped quotes.
 
         See also:
           man 1 ffmpeg-filters
