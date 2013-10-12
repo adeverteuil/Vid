@@ -513,11 +513,19 @@ class UtilsTestCase(unittest.TestCase):
             "drawtext",
             x="w/2-text_w/2",
             y="h/2-text_h/2",
-            #text="':,[]\\",
-            text="special characters escaping :',\\['];",
+            text=(
+                "Special characters escaping\n"
+                ": colon        :\n"
+                "' single quote '\n"
+                ", comma        ,\n"
+                "= equals       =\n"
+                "\\ backslash    \\\n"
+                "[ brackets     ]\n"
+                "; semicolon    ;"
+                ),
             fontcolor="white",
             fontsize="25",
-            fontfile="/usr/share/fonts/TTF/ttf-inconsolata.otf",
+            fontfile="/usr/share/fonts/OTF/Inconsolata.otf",
             box="1",
             boxcolor="0x000000aa",
             )

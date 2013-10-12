@@ -540,29 +540,69 @@ class FFmpegWrapper():                           #{{{1
             )
         return ["-filter:a", self._escape_filterchain(self.af)]
 
-    def _escape_filterchain(self, f):
-        """Convert  dict into an escaped string for ffmpeg filter arguments."""
-        filterchain = []
-        for filter in f:
-            name = filter[0]
-            args = filter[1]
-            if args:
-                arglist = []
-                for k, v in args.items():
-                    # Convert numbers to string.
-                    v = str(v)
-                    # 1st level of escaping : filter arguments.
-                    v = re.sub(r"([\:'])", r"\\\1", v)
-                    # 2nd level of escaping : filtergraph string.
-                    # Quote string. Unquote and escape quotes.
-                    v = v.replace("\\'", "'\\\\\\''")
-                    v = "'{}'".format(v)
-                    arglist.append("=".join((k, v)))
-                string = "=".join([name, ":".join(arglist)])
+    def _escape_filterchain(self, filters_list):
+        """Transform filters_list into an FFmpeg filtergraph syntax string.
+
+        Parameter filters_list is list of lists of 2 items.
+        The first of these items is the filter_name, and the second is
+        a dict of filter_arguments: [["foofilter", {"key": "value"}], ...]
+
+        Returns a properly escaped filterchain string.
+
+        The following is the FFmpeg filters concept hierarchy and their
+        respective special characters:
+
+          +- filtergraph             ";"
+             +- filterchain          ","
+                +- filter            "[]="
+                   +- arguments      "'\\:" <- Quoting happens at this level.
+                      +- libavutil   "'\\"
+
+        Quoting avoids the necessity of escaping characters which are special
+        to higher levels of parsing.
+
+        This is the algorithm for escaping arguments values:
+
+        1) Convert all filter argument values to strings;
+        2) Escape the escape character "\\" (libavutil level);
+        3) Escape the arguments special characters ":" and "\\"
+        4) Unquote and escape literal quotes (libavutil level);
+        5) Surround the string with unescaped quotes;
+
+        See also:
+          man 1 ffmpeg-filters
+          man 1 ffmpeg-utils
+
+        """
+        filterchain_list = []
+        for filter in filters_list:
+            filter_name = filter[0]
+            arguments_dict = filter[1]
+            if arguments_dict:
+                arguments_list = []
+                for key, value in arguments_dict.items():
+                    # 1) Convert numbers to string.
+                    value = str(value)
+                    # 2) Escape the escape character (libavutil level).
+                    value = value.replace("\\", "\\\\")
+                    # 3) Escape filter arguments' special characters.
+                    value = re.sub(r"([\\:'])", r"\\\1", value)
+                    # 4) Unquote and escape quotes.
+                    value = value.replace("\\'", "'\\\\\\''")
+                    # 5) Quote the whole string.
+                    value = "'{}'".format(value)
+                    arguments_list.append("=".join((key, value)))
+                # Make this happen:
+                # filter_name=key=value:key=value:key=value
+                filter_string = "=".join(
+                    [filter_name, ":".join(arguments_list)]
+                    )
             else:
-                string = name
-            filterchain.append(string)
-        return ",".join(filterchain)
+                filter_string = filter_name
+            filterchain_list.append(filter_string)
+        # If there is more than one filter, make this happen:
+        # filter_name=key=value:key=value,filter_name=key=value,filter_name
+        return ",".join(filterchain_list)
 
     def append_vf(self, filtername, **kwargs):
         self.logger.debug(
