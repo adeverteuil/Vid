@@ -681,8 +681,8 @@ class Shot(FFmpegWrapper):                       #{{{1
                 ) from err
         except :
             self.logger.exception("That's a new exception?!")
-        self.seek = seek
-        self.dur = dur
+        self._probe = Probe(self.name)
+        self.cut(seek, dur)
         self.process = None
         self.v_stream = None
         self.a_stream = None
@@ -695,7 +695,6 @@ class Shot(FFmpegWrapper):                       #{{{1
         if af is not None:
             for filter in af:
                 self.append_af(filter[0], **filter[1])
-        self._probe = Probe(self.name)
 
     def __repr__(self):
         return "<Shot({}), seek={}, dur={}>".format(
@@ -739,15 +738,8 @@ class Shot(FFmpegWrapper):                       #{{{1
         self.logger.debug("Demuxing {}.".format(self))
 
         # Define input arguments.
-        if (FASTSEEK_THRESHOLD is not None and
-            FASTSEEK_THRESHOLD > 10 and
-            self.seek > FASTSEEK_THRESHOLD
-            ):
-            fastseek = self.seek - (FASTSEEK_THRESHOLD - 10)
-            seek = FASTSEEK_THRESHOLD - 10
-            args += ["-ss", str(fastseek)]
-        else:
-            seek = self.seek  # This will actually be used for output.
+        if self.fastseek:
+            args += ["-ss", str(self.fastseek)]
         args += ["-i", self.name]
 
         # Define video arguments.
@@ -766,8 +758,8 @@ class Shot(FFmpegWrapper):                       #{{{1
                 t = RemoveHeader(open(video1_r, "rb"), open(video2_w, "wb"))
                 write_fds.append(video1_w)
                 self.v_stream = open(video2_r, "rb")
-                if seek:
-                    v_args += ["-ss", str(seek)]
+                if self.slowseek:
+                    v_args += ["-ss", str(self.slowseek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
                 v_args += self._format_vf()
@@ -783,8 +775,8 @@ class Shot(FFmpegWrapper):                       #{{{1
                     )
                 write_fds.append(video_w)
                 self.v_stream = open(video_r, "rb")
-                if seek:
-                    v_args += ["-ss", str(seek)]
+                if self.slowseek:
+                    v_args += ["-ss", str(self.slowseek)]
                 if self.dur:
                     v_args += ["-t", str(self.dur)]
                 v_args += self._format_vf()
@@ -822,8 +814,8 @@ class Shot(FFmpegWrapper):                       #{{{1
                 t = GenerateSilence(open(audio1_r, "rb"), open(audio2_w, "wb"))
                 write_fds.append(audio1_w)
                 self.a_stream = open(audio2_r, "rb")
-                if seek:
-                    a_args += ["-ss", str(seek)]
+                if self.slowseek:
+                    a_args += ["-ss", str(self.slowseek)]
                 if self.dur:
                     a_args += ["-t", str(self.dur)]
                 a_args += self._format_af()
@@ -839,8 +831,8 @@ class Shot(FFmpegWrapper):                       #{{{1
                         )
                     )
                 write_fds.append(audio_w)
-                if seek:
-                    a_args += ["-ss", str(seek)]
+                if self.slowseek:
+                    a_args += ["-ss", str(self.slowseek)]
                 if self.dur:
                     a_args += ["-t", str(self.dur)]
                 a_args += self._format_af()
@@ -867,12 +859,33 @@ class Shot(FFmpegWrapper):                       #{{{1
         return tuple(returnvalue)
 
     def cut(self, seek=0, dur=None):
-        """Sets the starting position and duration of the required frames."""
+        """Sets the starting position and duration of the output stream.
+
+        ffmpeg accepts an -ss option before and after -i.
+        An -ss given before -i seeks into the inputfile at keyframes.
+        An -ss given after -i will seek acurately by rendering every frames.
+
+        This method sets self.seek, self.fastseek and self.slowseek.
+        self.seek is used for repr(self).
+
+        See also: http://ffmpeg.org/trac/ffmpeg/wiki/Seeking%20with%20FFmpeg
+
+        """
         assert isinstance(seek, (int, float))
         if dur is not None:
             assert isinstance(seek, (int, float))
         self.seek = seek
         self.dur = dur
+
+        if (FASTSEEK_THRESHOLD is not None and
+            FASTSEEK_THRESHOLD > 10 and
+            self.seek > FASTSEEK_THRESHOLD
+            ):
+            self.fastseek = self.seek - (FASTSEEK_THRESHOLD - 10)
+            self.slowseek = FASTSEEK_THRESHOLD - 10
+        else:
+            self.fastseek = None
+            self.slowseek = self.seek
 
         # Validate end time against length of file.
         endtime = seek + (dur if dur is not None else 0)
@@ -916,9 +929,20 @@ class Shot(FFmpegWrapper):                       #{{{1
                 shadowcolor="black",
                 shadowx="2",
                 )
+            # Print the timecode and file name.
+            if self.fastseek:
+                # Timestamp information is relative to the start of the
+                # output stream. When -ss is used as an output option,
+                # the first frame of the output will have the expected
+                # timecode. However, if -ss is used as an input option,
+                # the timecode restarts at zero. If fastseek is used,
+                # add it to the timecode.
+                pts = "%{{expr:{}+t}}".format(self.fastseek)
+            else:
+                pts = "%{pts}"
             self.append_vf(
                 "drawtext",
-                text="%{{pts}}    %{{n}}\n{}".format(self.name),
+                text="{}\n{}".format(pts, self.name),
                 y="h-text_h-20",
                 x="30",
                 box="1",
